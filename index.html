@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Snake.io</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="game-container">
+    <div id="hud">
+      <span id="score">Score: 0</span>
+      <span id="leaderboard"></span>
+      <span id="high-score">Best: 0</span>
+    </div>
+    <div id="boost-bar"><div id="boost-fill"></div></div>
+    <canvas id="game-canvas"></canvas>
+    <div id="joystick-zone">
+      <div id="joystick-base">
+        <div id="joystick-knob"></div>
+      </div>
+    </div>
+    <div id="overlay" class="active">
+      <div id="overlay-content">
+        <h1>Snake.io</h1>
+        <p id="overlay-message">Arrow keys / WASD to move<br/>Hold Space or Shift to boost<br/>Touch: drag bottom half to move, tap top to boost</p>
+        <div id="mode-selector">
+          <button class="mode-btn active" data-mode="single">Single Player</button>
+          <button class="mode-btn" data-mode="multi">Multiplayer</button>
+        </div>
+        <div id="server-config" style="display:none">
+          <input id="server-url" type="text" placeholder="wss://your-server.fly.dev" spellcheck="false" />
+          <input id="player-name" type="text" placeholder="Your name" maxlength="16" spellcheck="false" />
+        </div>
+        <div id="color-picker">
+          <p id="color-label">Pick your color</p>
+          <div id="color-swatches"></div>
+        </div>
+        <button id="start-btn">Play</button>
+        <p id="status-msg"></p>
+      </div>
+    </div>
+  </div>
+  <script src="game.js"></script>
+</body>
+</html>

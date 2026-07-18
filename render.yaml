@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: snake-io-game
+    runtime: node
+    plan: free
+    buildCommand: npm install --production
+    startCommand: node server.js
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
