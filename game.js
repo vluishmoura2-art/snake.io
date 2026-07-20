@@ -13,8 +13,6 @@
   const joystickKnob = document.getElementById('joystick-knob');
   const colorSwatches = document.getElementById('color-swatches');
   const modeBtns = document.querySelectorAll('.mode-btn');
-  const serverConfig = document.getElementById('server-config');
-  const serverUrlInput = document.getElementById('server-url');
   const playerNameInput = document.getElementById('player-name');
   const statusMsg = document.getElementById('status-msg');
 
@@ -33,6 +31,7 @@
   const DROP_FOOD_RATIO = 0.6;
   const MAX_SEGMENT_SIZE = 30;
   const MIN_SEGMENT_SIZE = 16;
+  const WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
 
   const PALETTE = [
     { name: 'Green',    primary: '#00cc66', dark: '#009944' },
@@ -62,6 +61,7 @@
   let remoteSnakes = [];
   let remoteFoods = [];
   let wsConnected = false;
+  let pendingJoin = false;
 
   highScore = +(localStorage.getItem('snake-io-hs') || 0);
   highScoreEl.textContent = `Best: ${highScore}`;
@@ -69,7 +69,6 @@
   playerColorIdx = +(localStorage.getItem('snake-io-color') || 0);
   if (playerColorIdx < 0 || playerColorIdx >= PALETTE.length) playerColorIdx = 0;
 
-  serverUrlInput.value = localStorage.getItem('snake-io-server') || '';
   playerNameInput.value = localStorage.getItem('snake-io-name') || '';
 
   function buildColorPicker() {
@@ -95,7 +94,9 @@
       gameMode = btn.dataset.mode;
       modeBtns.forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
-      serverConfig.style.display = gameMode === 'multi' ? 'flex' : 'none';
+      if (gameMode === 'multi' && !wsConnected) {
+        preconnectMultiplayer();
+      }
     });
   });
 
@@ -373,31 +374,25 @@
 
   // ==================== MULTIPLAYER ====================
 
-  function connectMultiplayer() {
-    const url = serverUrlInput.value.trim();
-    const name = playerNameInput.value.trim() || 'Player';
-    localStorage.setItem('snake-io-server', url);
-    localStorage.setItem('snake-io-name', name);
-
-    if (!url) {
-      statusMsg.textContent = 'Enter a server URL';
-      return;
-    }
-
-    statusMsg.textContent = 'Connecting...';
+  function preconnectMultiplayer() {
+    if (ws && ws.readyState <= 1) return;
+    statusMsg.textContent = 'Connecting to server...';
     wsConnected = false;
 
     try {
-      ws = new WebSocket(url);
+      ws = new WebSocket(WS_URL);
     } catch (e) {
-      statusMsg.textContent = 'Invalid server URL';
+      statusMsg.textContent = 'Connection failed';
       return;
     }
 
     ws.onopen = () => {
       wsConnected = true;
-      statusMsg.textContent = 'Connected!';
-      ws.send(JSON.stringify({ type: 'join', color: playerColorIdx, name }));
+      statusMsg.textContent = 'Connected! Press Play to join.';
+      if (pendingJoin) {
+        pendingJoin = false;
+        joinMultiplayer();
+      }
     };
 
     ws.onmessage = (evt) => {
@@ -408,19 +403,33 @@
 
     ws.onclose = () => {
       wsConnected = false;
-      if (running && gameMode === 'multi') {
+      if (gameMode === 'multi') {
         statusMsg.textContent = 'Disconnected. Reconnecting...';
         setTimeout(() => {
-          if (gameMode === 'multi' && running) connectMultiplayer();
+          if (gameMode === 'multi') preconnectMultiplayer();
         }, 2000);
       } else {
-        statusMsg.textContent = 'Disconnected';
+        statusMsg.textContent = '';
       }
     };
 
     ws.onerror = () => {
       statusMsg.textContent = 'Connection failed';
     };
+  }
+
+  function joinMultiplayer() {
+    const name = playerNameInput.value.trim() || 'Player';
+    localStorage.setItem('snake-io-name', name);
+
+    if (!wsConnected || !ws || ws.readyState !== 1) {
+      pendingJoin = true;
+      preconnectMultiplayer();
+      return;
+    }
+
+    pendingJoin = false;
+    ws.send(JSON.stringify({ type: 'join', color: playerColorIdx, name }));
   }
 
   function handleServerMessage(msg) {
@@ -477,21 +486,27 @@
   }
 
   function sendInput() {
-    if (ws && ws.readyState === 1 && playerAlive) {
-      ws.send(JSON.stringify({ type: 'input', dir: nextDirection }));
-    }
+    try {
+      if (ws && ws.readyState === 1 && playerAlive) {
+        ws.send(JSON.stringify({ type: 'input', dir: nextDirection }));
+      }
+    } catch (e) {}
   }
 
   function sendBoost(on) {
-    if (ws && ws.readyState === 1) {
-      ws.send(JSON.stringify({ type: 'boost', on }));
-    }
+    try {
+      if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({ type: 'boost', on }));
+      }
+    } catch (e) {}
   }
 
   function sendRespawn() {
-    if (ws && ws.readyState === 1) {
-      ws.send(JSON.stringify({ type: 'respawn' }));
-    }
+    try {
+      if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({ type: 'respawn' }));
+      }
+    } catch (e) {}
   }
 
   // ==================== RENDERING ====================
@@ -532,10 +547,12 @@
   }
 
   function drawSnakeSegs(segs, colorIdx, isPlayer, cam, segCount, isBoosting) {
+    if (!Array.isArray(segs) || !segs.length) return;
     const pal = PALETTE[colorIdx] || PALETTE[0];
     const sz = segmentSize(segCount);
 
     segs.forEach((seg, i) => {
+      if (!seg || typeof seg.x !== 'number' || typeof seg.y !== 'number') return;
       const sx = seg.x * GRID - cam.x;
       const sy = seg.y * GRID - cam.y;
       if (sx + GRID < -40 || sx > viewW + 40 || sy + GRID < -40 || sy > viewH + 40) return;
@@ -586,7 +603,9 @@
   }
 
   function drawFoodList(foodList, cam) {
+    if (!Array.isArray(foodList)) return;
     for (const f of foodList) {
+      if (!f || typeof f.x !== 'number' || typeof f.y !== 'number') continue;
       const fx = f.x * GRID - cam.x;
       const fy = f.y * GRID - cam.y;
       if (fx + GRID < 0 || fx > viewW || fy + GRID < 0 || fy > viewH) continue;
@@ -660,12 +679,14 @@
     drawGrid(cam);
     drawBorder(cam);
     drawFoodList(remoteFoods, cam);
-    for (const rs of remoteSnakes) {
-      if (rs.id !== myId) {
-        drawSnakeSegs(rs.segments, rs.color, false, cam, rs.segments.length, rs.boosting);
+    if (Array.isArray(remoteSnakes)) {
+      for (const rs of remoteSnakes) {
+        if (rs && rs.id !== myId && Array.isArray(rs.segments) && rs.segments.length) {
+          drawSnakeSegs(rs.segments, rs.color, false, cam, rs.segments.length, rs.boosting);
+        }
       }
     }
-    if (playerAlive && snake.segments.length) {
+    if (playerAlive && snake && Array.isArray(snake.segments) && snake.segments.length) {
       drawSnakeSegs(snake.segments, snake.color, true, cam, snake.segments.length, boosting);
     }
     drawBoostBar();
@@ -676,7 +697,7 @@
   function loopSingle() {
     updateSingle();
     if (!running) return;
-    drawSingle();
+    try { drawSingle(); } catch (e) { console.error('drawSingle error', e); }
     const tick = (snake && snake.boosting) ? BOOST_TICK_MS : TICK_MS;
     loopId = setTimeout(loopSingle, tick);
   }
@@ -687,11 +708,12 @@
       direction = { ...nextDirection };
       sendInput();
     }
-    drawMulti();
+    try { drawMulti(); } catch (e) { console.error('drawMulti error', e); }
     loopId = setTimeout(loopMulti, 33);
   }
 
   function startSinglePlayer() {
+    clearTimeout(loopId);
     init();
     running = true;
     overlay.classList.remove('active');
@@ -700,6 +722,7 @@
   }
 
   function startMultiplayer() {
+    clearTimeout(loopId);
     remoteSnakes = [];
     remoteFoods = [];
     myId = null;
@@ -709,8 +732,10 @@
     score = 0;
     boosting = false;
     playerAlive = false;
+    running = true;
     scoreEl.textContent = `Score: ${score}`;
-    connectMultiplayer();
+    joinMultiplayer();
+    overlay.classList.remove('active');
     loopId = setTimeout(loopMulti, 33);
   }
 
@@ -738,9 +763,11 @@
   }
 
   function startGame() {
-    if (gameMode === 'multi' && !wsConnected && myId) {
+    if (gameMode === 'multi' && wsConnected && myId) {
       sendRespawn();
+      playerAlive = true;
       running = true;
+      boosting = false;
       overlay.classList.remove('active');
       loopId = setTimeout(loopMulti, 33);
       return;

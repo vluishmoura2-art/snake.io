@@ -83,6 +83,7 @@ function spawnPlayer(id, color) {
     boosting: false,
     pendingDir: null,
     ws: null,
+    deathNotified: false,
   };
 }
 
@@ -241,7 +242,8 @@ function gameLoop() {
   }
 
   for (const p of players.values()) {
-    if (!p.alive && p.ws && p.ws.readyState === 1) {
+    if (!p.alive && !p.deathNotified && p.ws && p.ws.readyState === 1) {
+      p.deathNotified = true;
       p.ws.send(JSON.stringify({ type: 'died', score: p.score }));
     }
   }
@@ -308,6 +310,7 @@ wss.on('connection', (ws) => {
         const np = spawnPlayer(id, p.color);
         np.name = p.name;
         np.ws = ws;
+        np.deathNotified = false;
         Object.assign(p, np);
       }
     }
