@@ -818,8 +818,13 @@
   // Touch joystick
   let touchId = null;
   let touchCenter = { x: 0, y: 0 };
-  const JOY_RADIUS = 50;
+  const JOY_RADIUS = 65;
   let boostTouchId = null;
+
+  function getJoystickCenter() {
+    const rect = joystickBase.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  }
 
   function handleTouchStart(e) {
     if (!running || !playerAlive) return;
@@ -828,9 +833,7 @@
       const inBottom = t.clientY > viewH * 0.5;
       if (inBottom && touchId === null) {
         touchId = t.identifier;
-        touchCenter = { x: t.clientX, y: t.clientY };
-        joystickBase.style.left = (t.clientX - 60) + 'px';
-        joystickBase.style.top = (t.clientY - 60) + 'px';
+        touchCenter = getJoystickCenter();
         joystickBase.classList.add('active');
       } else if (!inBottom && boostTouchId === null) {
         boostTouchId = t.identifier;

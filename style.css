@@ -96,47 +96,35 @@ body {
 
 #joystick-base {
   position: absolute;
-  width: 140px;
-  height: 140px;
+  width: 150px;
+  height: 150px;
   border-radius: 50%;
-  background: rgba(0, 255, 136, 0.08);
-  border: 3px solid rgba(0, 255, 136, 0.3);
+  background: rgba(0, 255, 136, 0.1);
+  border: 3px solid rgba(0, 255, 136, 0.35);
   display: flex;
   justify-content: center;
   align-items: center;
   pointer-events: none;
-  opacity: 1;
-  transition: opacity 0.15s, border-color 0.15s, background 0.15s, box-shadow 0.15s;
-  box-shadow: 0 0 18px rgba(0, 255, 136, 0.12);
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
 
 #joystick-base.active {
-  opacity: 1;
-  border-color: rgba(0, 255, 136, 0.7);
-  background: rgba(0, 255, 136, 0.14);
-  box-shadow: 0 0 30px rgba(0, 255, 136, 0.3);
+  border-color: rgba(0, 255, 136, 0.85);
+  background: rgba(0, 255, 136, 0.15);
+  box-shadow: 0 0 40px rgba(0, 255, 136, 0.4), inset 0 0 20px rgba(0, 255, 136, 0.1);
 }
 
 #joystick-hint {
   display: none;
-  position: absolute;
-  width: 140px;
-  height: 140px;
-  border-radius: 50%;
-  border: 2px dashed rgba(0, 255, 136, 0.25);
-  pointer-events: none;
-  opacity: 0.5;
-  left: 30px;
-  bottom: 30px;
 }
 
 #joystick-knob {
-  width: 56px;
-  height: 56px;
+  width: 60px;
+  height: 60px;
   border-radius: 50%;
-  background: rgba(0, 255, 136, 0.45);
-  border: 3px solid rgba(0, 255, 136, 0.8);
-  box-shadow: 0 0 16px rgba(0, 255, 136, 0.4);
+  background: radial-gradient(circle, rgba(0, 255, 136, 0.6), rgba(0, 255, 136, 0.3));
+  border: 3px solid #00ff88;
+  box-shadow: 0 0 20px rgba(0, 255, 136, 0.5), 0 0 6px rgba(0, 255, 136, 0.8);
   transition: none;
 }
 
@@ -314,23 +302,14 @@ body {
   }
 
   #joystick-base {
-    opacity: 0.6;
-    border-color: rgba(0, 255, 136, 0.45);
-    background: rgba(0, 255, 136, 0.06);
-    box-shadow: 0 0 20px rgba(0, 255, 136, 0.15);
-  }
-
-  #joystick-base.active {
-    opacity: 1;
-    border-color: rgba(0, 255, 136, 0.8);
-    background: rgba(0, 255, 136, 0.15);
-    box-shadow: 0 0 36px rgba(0, 255, 136, 0.35);
+    left: 24px;
+    bottom: 80px;
   }
 
   #joystick-knob {
-    background: rgba(0, 255, 136, 0.55);
+    background: radial-gradient(circle, rgba(0, 255, 136, 0.7), rgba(0, 255, 136, 0.35));
     border-color: #00ff88;
-    box-shadow: 0 0 14px rgba(0, 255, 136, 0.5);
+    box-shadow: 0 0 20px rgba(0, 255, 136, 0.6), 0 0 8px rgba(0, 255, 136, 0.9);
   }
 
   #hud {
