@@ -1,47 +1,51 @@
-(() => {
-  const canvas = document.getElementById('game-canvas');
-  const ctx = canvas.getContext('2d');
-  const overlay = document.getElementById('overlay');
-  const overlayMessage = document.getElementById('overlay-message');
-  const startBtn = document.getElementById('start-btn');
-  const scoreEl = document.getElementById('score');
-  const highScoreEl = document.getElementById('high-score');
-  const leaderboardEl = document.getElementById('leaderboard');
-  const boostBar = document.getElementById('boost-fill');
-  const joystickZone = document.getElementById('joystick-zone');
-  const joystickBase = document.getElementById('joystick-base');
-  const joystickKnob = document.getElementById('joystick-knob');
-  const colorSwatches = document.getElementById('color-swatches');
-  const modeBtns = document.querySelectorAll('.mode-btn');
-  const playerNameInput = document.getElementById('player-name');
-  const statusMsg = document.getElementById('status-msg');
+﻿(() => {
+  var canvas = document.getElementById('game-canvas');
+  var ctx = canvas.getContext('2d');
+  var overlay = document.getElementById('overlay');
+  var overlayMessage = document.getElementById('overlay-message');
+  var startBtn = document.getElementById('start-btn');
+  var scoreEl = document.getElementById('score');
+  var highScoreEl = document.getElementById('high-score');
+  var leaderboardEl = document.getElementById('leaderboard');
+  var boostBar = document.getElementById('boost-fill');
+  var joystickZone = document.getElementById('joystick-zone');
+  var joystickBase = document.getElementById('joystick-base');
+  var joystickKnob = document.getElementById('joystick-knob');
+  var colorSwatches = document.getElementById('color-swatches');
+  var modeBtns = document.querySelectorAll('.mode-btn');
+  var playerNameInput = document.getElementById('player-name');
+  var statusMsg = document.getElementById('status-msg');
 
-  const MAP_W = 4000;
-  const MAP_H = 4000;
-  const BASE_SPEED = 120;
-  const BOOST_SPEED = 220;
-  const ROTATION_SPEED = 3.0;
-  const RECORD_INTERVAL = 4;
-  const SPACING_SAMPLES = 3;
-  const MAX_HISTORY = 1000;
-  const HEAD_RADIUS = 10;
-  const SEGMENT_RADIUS = 8;
-  const PICKUP_RADIUS = 14;
-  const FOOD_COUNT = 150;
-  const MAX_FOOD = 500;
-  const BOOST_COST_PER_SEC = 10;
-  const MIN_BOOST_SCORE = 5;
-  const DROP_FOOD_RATIO = 0.6;
-  const BOT_COUNT = 7;
-  const MAX_SEGMENTS = 200;
-  const SPAWN_MARGIN = 300;
-  const MIN_SEG_RADIUS = 4;
-  const MAX_SEG_RADIUS = 12;
-  const GRID_LINE_SPACING = 100;
+  var MAP_W = 4000;
+  var MAP_H = 4000;
+  var BASE_SPEED = 120;
+  var BOOST_SPEED = 220;
+  var ROTATION_SPEED = 3.0;
+  var STIFFNESS = 15;
+  var BASE_SEGMENT_DISTANCE = 14;
+  var BOOST_STRETCH = 1.35;
+  var COMPRESSION_THRESHOLD = 0.3;
+  var COMPRESSION_MIN = 0.55;
+  var HEAD_RADIUS = 10;
+  var SEGMENT_RADIUS = 8;
+  var PICKUP_RADIUS = 14;
+  var FOOD_COUNT = 150;
+  var MAX_FOOD = 500;
+  var BOOST_COST_PER_SEC = 10;
+  var MIN_BOOST_SCORE = 5;
+  var DROP_FOOD_RATIO = 0.6;
+  var BOT_COUNT = 7;
+  var MAX_SEGMENTS = 200;
+  var SPAWN_MARGIN = 300;
+  var MIN_SEG_RADIUS = 4;
+  var MAX_SEG_RADIUS = 12;
+  var GRID_SPACING = 100;
+  var HEAD_SCALE = 1.0;
+  var TAIL_SCALE_RATIO = 0.35;
 
-  const WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
+  var WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
 
-  const PALETTE = [
+  var PALETTE = [
     { name: 'Green',  primary: '#00cc66', dark: '#009944' },
     { name: 'Blue',   primary: '#3399ff', dark: '#2277cc' },
     { name: 'Red',    primary: '#ff4444', dark: '#cc2222' },
@@ -53,29 +57,36 @@
     { name: 'Lime',   primary: '#aaff00', dark: '#88cc00' },
     { name: 'White',  primary: '#eeeeee', dark: '#bbbbbb' },
     { name: 'Coral',  primary: '#ff7777', dark: '#cc4444' },
-    { name: 'Teal',   primary: '#00bfa5', dark: '#009977' },
+    { name: 'Teal',   primary: '#00bfa5', dark: '#009977' }
   ];
 
-  let viewW, viewH;
-  let score, highScore, running, animFrameId;
-  let playerAlive, boosting;
-  let playerColorIdx;
-  let lastTime = 0;
+  var SKINS = [
+    { id: 'classic',  name: 'Classic',  spikes: null, scales: null, tail: 'round', head: 'default' },
+    { id: 'spiky',    name: 'Spiky',    spikes: { count: 2, len: 0.55, width: 0.25 }, scales: null, tail: 'stinger', head: 'fangs' },
+    { id: 'scaly',    name: 'Scaly',    spikes: null, scales: { freq: 0.5, opacity: 0.18 }, tail: 'round', head: 'default' },
+    { id: 'armored',  name: 'Armored',  spikes: { count: 1, len: 0.3, width: 0.5 }, scales: { freq: 0.7, opacity: 0.12 }, tail: 'stinger', head: 'horns' },
+    { id: 'serpent',  name: 'Serpent',  spikes: null, scales: { freq: 0.35, opacity: 0.22 }, tail: 'forked', head: 'fangs' },
+    { id: 'royal',    name: 'Royal',    spikes: { count: 3, len: 0.4, width: 0.18 }, scales: null, tail: 'stinger', head: 'horns' },
+  ];
 
-  let gameMode = 'single';
-  let ws = null;
-  let myId = null;
-  let wsConnected = false;
-  let pendingJoin = false;
-  let remoteSnakes = [];
-  let remoteFoods = [];
-
-  let headX, headY, angle, targetAngle, segCount;
-  let snakeHistory, lastRecordX, lastRecordY;
-  let bots, foods;
-
-  const keys = {};
-  let mouseActive = false;
+  var viewW, viewH;
+  var score, highScore, running, animFrameId;
+  var playerAlive, boosting;
+  var playerColorIdx;
+  var lastTime = 0;
+  var gameMode = 'single';
+  var ws = null;
+  var myId = null;
+  var wsConnected = false;
+  var pendingJoin = false;
+  var remoteSnakes = [];
+  var remoteFoods = [];
+  var headX, headY, angle, targetAngle;
+  var playerSegments;
+  var bots, foods;
+  var keys = {};
+  var mouseActive = false;
+  var playerSkinIdx = 0;
 
   highScore = +(localStorage.getItem('snake-io-hs') || 0);
   highScoreEl.textContent = 'Best: ' + highScore;
@@ -86,7 +97,7 @@
   function buildColorPicker() {
     colorSwatches.innerHTML = '';
     PALETTE.forEach(function(c, i) {
-      const el = document.createElement('div');
+      var el = document.createElement('div');
       el.className = 'color-swatch' + (i === playerColorIdx ? ' selected' : '');
       el.style.background = c.primary;
       el.title = c.name;
@@ -101,6 +112,23 @@
   }
   buildColorPicker();
 
+  var skinSwatches = document.getElementById('skin-swatches');
+  function buildSkinPicker() {
+    skinSwatches.innerHTML = '';
+    SKINS.forEach(function(s, i) {
+      var btn = document.createElement('button');
+      btn.className = 'skin-btn' + (i === playerSkinIdx ? ' active' : '');
+      btn.textContent = s.name;
+      btn.addEventListener('click', function() {
+        playerSkinIdx = i;
+        skinSwatches.querySelectorAll('.skin-btn').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+      });
+      skinSwatches.appendChild(btn);
+    });
+  }
+  buildSkinPicker();
+
   modeBtns.forEach(function(btn) {
     btn.addEventListener('click', function() {
       gameMode = btn.dataset.mode;
@@ -111,7 +139,7 @@
   });
 
   function resize() {
-    const dpr = window.devicePixelRatio || 1;
+    var dpr = window.devicePixelRatio || 1;
     viewW = window.innerWidth;
     viewH = window.innerHeight;
     canvas.width = viewW * dpr;
@@ -121,120 +149,89 @@
   window.addEventListener('resize', resize);
   resize();
 
-  // ==================== RING BUFFER ====================
-
-  function createHistory(cap) {
-    return { buf: new Float32Array(cap * 2), head: 0, count: 0, capacity: cap };
-  }
-
-  function pushHistory(h, x, y) {
-    h.buf[h.head * 2] = x;
-    h.buf[h.head * 2 + 1] = y;
-    h.head = (h.head + 1) % h.capacity;
-    if (h.count < h.capacity) h.count++;
-  }
-
-  function getHistory(h, index) {
-    if (index >= h.count) return null;
-    const i = (h.head - 1 - index + h.capacity) % h.capacity;
-    return { x: h.buf[i * 2], y: h.buf[i * 2 + 1] };
-  }
-
-  // ==================== UTILITIES ====================
-
   function angleDiff(a, b) {
-    let d = b - a;
+    var d = b - a;
     while (d > Math.PI) d -= Math.PI * 2;
     while (d < -Math.PI) d += Math.PI * 2;
     return d;
   }
-
   function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
-
-  function distSq(x1, y1, x2, y2) {
-    var dx = x1 - x2, dy = y1 - y2;
-    return dx * dx + dy * dy;
-  }
-
+  function distSq(x1, y1, x2, y2) { var dx = x1 - x2, dy = y1 - y2; return dx * dx + dy * dy; }
   function randFloat(lo, hi) { return lo + Math.random() * (hi - lo); }
 
-  // ==================== HISTORY RECORDING ====================
-
-  function recordHistory(hist, x, y, lastX, lastY) {
-    var dx = x - lastX;
-    var dy = y - lastY;
-    if (dx * dx + dy * dy >= RECORD_INTERVAL * RECORD_INTERVAL) {
-      pushHistory(hist, x, y);
-      return { lx: x, ly: y };
-    }
-    return { lx: lastX, ly: lastY };
-  }
-
-  // ==================== COMPUTE SEGMENTS ====================
-
-  function computeSegs(hist, count) {
+  function createSegments(x, y, ang, count) {
     var segs = [];
     for (var i = 0; i < count; i++) {
-      var pos = getHistory(hist, (i + 1) * SPACING_SAMPLES);
-      if (!pos) break;
-      segs.push({ x: pos.x, y: pos.y });
+      segs.push({
+        x: x - Math.cos(ang) * BASE_SEGMENT_DISTANCE * i,
+        y: y - Math.sin(ang) * BASE_SEGMENT_DISTANCE * i
+      });
     }
     return segs;
   }
 
-  // ==================== FOOD ====================
-
-  function spawnFood(x, y) {
-    return {
-      x: x !== undefined ? x : randFloat(50, MAP_W - 50),
-      y: y !== undefined ? y : randFloat(50, MAP_H - 50),
-    };
-  }
-
-  function dropFoodFromHistory(hist, segCount) {
-    var count = Math.floor(segCount * DROP_FOOD_RATIO);
-    if (count === 0) return;
-    var step = Math.max(1, Math.floor(segCount / count));
-    var placed = 0;
-    for (var i = 0; i < segCount && placed < count; i += step) {
-      var pos = getHistory(hist, (i + 1) * SPACING_SAMPLES);
-      if (pos && foods.length < MAX_FOOD) {
-        foods.push(spawnFood(pos.x, pos.y));
-        placed++;
+  function followLeader(segments, headAngle, isBoosting, dt) {
+    var t = 1 - Math.exp(-STIFFNESS * dt);
+    var rots = new Array(segments.length);
+    rots[0] = headAngle;
+    for (var ri = 1; ri < segments.length; ri++) {
+      rots[ri] = Math.atan2(segments[ri - 1].y - segments[ri].y, segments[ri - 1].x - segments[ri].x);
+    }
+    for (var i = 1; i < segments.length; i++) {
+      var restDist = isBoosting ? BASE_SEGMENT_DISTANCE * BOOST_STRETCH : BASE_SEGMENT_DISTANCE;
+      if (i >= 2) {
+        var angleDelta = Math.abs(angleDiff(rots[i - 1], rots[i]));
+        if (angleDelta > COMPRESSION_THRESHOLD) {
+          var tc = clamp((angleDelta - COMPRESSION_THRESHOLD) / (Math.PI * 0.5), 0, 1);
+          restDist *= 1.0 - tc * (1.0 - COMPRESSION_MIN);
+        }
+      }
+      var prev = segments[i - 1];
+      var curr = segments[i];
+      var dx = prev.x - curr.x;
+      var dy = prev.y - curr.y;
+      var dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > 0.001) {
+        var ratio = restDist / dist;
+        curr.x += (prev.x - dx * ratio - curr.x) * t;
+        curr.y += (prev.y - dy * ratio - curr.y) * t;
       }
     }
   }
 
-  // ==================== HEAD COLLISION ====================
+  function spawnFood(x, y) {
+    return {
+      x: x !== undefined ? x : randFloat(50, MAP_W - 50),
+      y: y !== undefined ? y : randFloat(50, MAP_H - 50)
+    };
+  }
 
-  var HEAD_COL_SQ = (HEAD_RADIUS + SEGMENT_RADIUS) * (HEAD_RADIUS + SEGMENT_RADIUS);
+  function dropFoodFromSegments(segs) {
+    var count = Math.floor(segs.length * DROP_FOOD_RATIO);
+    if (count === 0) return;
+    var step = Math.max(1, Math.floor(segs.length / count));
+    var placed = 0;
+    for (var i = 0; i < segs.length && placed < count; i += step) {
+      if (foods.length < MAX_FOOD) { foods.push(spawnFood(segs[i].x, segs[i].y)); placed++; }
+    }
+  }
+
   var PICKUP_SQ = PICKUP_RADIUS * PICKUP_RADIUS;
+  var HEAD_COL_SQ = (HEAD_RADIUS + SEGMENT_RADIUS) * (HEAD_RADIUS + SEGMENT_RADIUS);
 
-  function headHitsSegments(hist, segCount, startIdx) {
-    for (var i = startIdx; i < segCount; i++) {
-      var pos = getHistory(hist, i * SPACING_SAMPLES);
-      if (pos && distSq(headX, headY, pos.x, pos.y) < HEAD_COL_SQ) return true;
+  function headHitsSegments(segs, startIdx) {
+    for (var i = startIdx; i < segs.length; i++) {
+      if (distSq(headX, headY, segs[i].x, segs[i].y) < HEAD_COL_SQ) return true;
     }
     return false;
   }
-
-  // ==================== INIT SINGLE PLAYER ====================
 
   function initSinglePlayer() {
     headX = MAP_W / 2;
     headY = MAP_H / 2;
     angle = Math.random() * Math.PI * 2;
     targetAngle = angle;
-    segCount = 4;
-    snakeHistory = createHistory(MAX_HISTORY);
-    for (var i = 1; i <= segCount * SPACING_SAMPLES + 4; i++) {
-      pushHistory(snakeHistory,
-        headX - Math.cos(angle) * RECORD_INTERVAL * i,
-        headY - Math.sin(angle) * RECORD_INTERVAL * i
-      );
-    }
-    lastRecordX = headX;
-    lastRecordY = headY;
+    playerSegments = createSegments(headX, headY, angle, 4);
     score = 0;
     boosting = false;
     playerAlive = true;
@@ -242,35 +239,23 @@
 
     bots = [];
     for (var b = 0; b < BOT_COUNT; b++) {
-      var bAngle = Math.random() * Math.PI * 2;
+      var bA = Math.random() * Math.PI * 2;
       var bx = randFloat(SPAWN_MARGIN, MAP_W - SPAWN_MARGIN);
       var by = randFloat(SPAWN_MARGIN, MAP_H - SPAWN_MARGIN);
-      var bHist = createHistory(MAX_HISTORY);
-      for (var j = 1; j <= 4 * SPACING_SAMPLES + 4; j++) {
-        pushHistory(bHist,
-          bx - Math.cos(bAngle) * RECORD_INTERVAL * j,
-          by - Math.sin(bAngle) * RECORD_INTERVAL * j
-        );
-      }
       bots.push({
-        headX: bx, headY: by, angle: bAngle, targetAngle: bAngle,
-        history: bHist, lastRecordX: bx, lastRecordY: by,
-        segmentCount: 4, color: b % PALETTE.length,
-        alive: true, score: 0, boosting: false, boostCooldown: 0,
+        headX: bx, headY: by, angle: bA, targetAngle: bA,
+        segments: createSegments(bx, by, bA, 4),
+        color: b % PALETTE.length,
+        skinIdx: Math.floor(Math.random() * SKINS.length),
+        alive: true, score: 0, boosting: false, boostCooldown: 0
       });
     }
-
     foods = [];
-    for (var f = 0; f < FOOD_COUNT; f++) {
-      foods.push(spawnFood());
-    }
+    for (var f = 0; f < FOOD_COUNT; f++) foods.push(spawnFood());
   }
-
-  // ==================== PLAYER UPDATE ====================
 
   function updatePlayer(dt) {
     if (!playerAlive) return;
-
     var diff = angleDiff(angle, targetAngle);
     var maxTurn = ROTATION_SPEED * dt;
     if (Math.abs(diff) > maxTurn) diff = Math.sign(diff) * maxTurn;
@@ -279,9 +264,7 @@
     if (boosting && score >= MIN_BOOST_SCORE) {
       score -= BOOST_COST_PER_SEC * dt;
       if (score < 0) score = 0;
-    } else if (boosting) {
-      boosting = false;
-    }
+    } else if (boosting) { boosting = false; }
 
     var speed = boosting ? BOOST_SPEED : BASE_SPEED;
     headX += Math.cos(angle) * speed * dt;
@@ -289,92 +272,61 @@
     headX = clamp(headX, 0, MAP_W);
     headY = clamp(headY, 0, MAP_H);
 
-    var rec = recordHistory(snakeHistory, headX, headY, lastRecordX, lastRecordY);
-    lastRecordX = rec.lx;
-    lastRecordY = rec.ly;
+    playerSegments[0].x = headX;
+    playerSegments[0].y = headY;
+    followLeader(playerSegments, angle, boosting, dt);
 
-    if (headX <= 0 || headX >= MAP_W || headY <= 0 || headY >= MAP_H) {
-      diePlayer();
-      return;
-    }
-
-    if (headHitsSegments(snakeHistory, segCount, 4)) {
-      diePlayer();
-      return;
-    }
-
+    if (headX <= 0 || headX >= MAP_W || headY <= 0 || headY >= MAP_H) { diePlayer(); return; }
+    if (headHitsSegments(playerSegments, 4)) { diePlayer(); return; }
     for (var b = 0; b < bots.length; b++) {
-      var bot = bots[b];
-      if (!bot.alive) continue;
-      if (headHitsSegments(bot.history, bot.segmentCount, 1)) {
-        diePlayer();
-        return;
-      }
+      if (bots[b].alive && headHitsSegments(bots[b].segments, 1)) { diePlayer(); return; }
     }
 
     var ate = 0;
     for (var i = foods.length - 1; i >= 0; i--) {
       if (distSq(headX, headY, foods[i].x, foods[i].y) < PICKUP_SQ) {
-        foods.splice(i, 1);
-        ate++;
+        foods.splice(i, 1); ate++;
         if (foods.length < MAX_FOOD) foods.push(spawnFood());
       }
     }
     if (ate > 0) {
-      segCount = Math.min(segCount + ate, MAX_SEGMENTS);
+      for (var a = 0; a < ate && playerSegments.length < MAX_SEGMENTS; a++) {
+        var tail = playerSegments[playerSegments.length - 1];
+        playerSegments.push({ x: tail.x, y: tail.y });
+      }
       score += ate;
     }
-
     scoreEl.textContent = 'Score: ' + Math.round(score);
   }
 
   function diePlayer() {
     playerAlive = false;
-    dropFoodFromHistory(snakeHistory, segCount);
+    dropFoodFromSegments(playerSegments);
     gameOverSingle();
   }
 
-  // ==================== BOT AI ====================
-
   function updateBot(bot, dt) {
     if (!bot.alive) return;
-
-    var bestDist = Infinity;
-    var bestAngle = 0;
+    var bestDist = Infinity, bestAngle = 0;
     for (var i = 0; i < foods.length; i++) {
       var d = distSq(bot.headX, bot.headY, foods[i].x, foods[i].y);
-      if (d < bestDist) {
-        bestDist = d;
-        bestAngle = Math.atan2(foods[i].y - bot.headY, foods[i].x - bot.headX);
-      }
+      if (d < bestDist) { bestDist = d; bestAngle = Math.atan2(foods[i].y - bot.headY, foods[i].x - bot.headX); }
     }
-
     var futureX = bot.headX + Math.cos(bot.targetAngle) * 150;
     var futureY = bot.headY + Math.sin(bot.targetAngle) * 150;
     if (futureX < 150 || futureX > MAP_W - 150 || futureY < 150 || futureY > MAP_H - 150) {
       bot.targetAngle = Math.atan2(MAP_H / 2 - bot.headY, MAP_W / 2 - bot.headX);
-    } else {
-      bot.targetAngle = bestAngle;
-    }
-
-    if (Math.random() < 0.015) {
-      bot.targetAngle += (Math.random() - 0.5) * 1.2;
-    }
+    } else { bot.targetAngle = bestAngle; }
+    if (Math.random() < 0.015) bot.targetAngle += (Math.random() - 0.5) * 1.2;
 
     var diff = angleDiff(bot.angle, bot.targetAngle);
     var maxTurn = ROTATION_SPEED * dt;
     if (Math.abs(diff) > maxTurn) diff = Math.sign(diff) * maxTurn;
     bot.angle += diff;
 
-    if (bot.boostCooldown > 0) {
-      bot.boostCooldown -= dt;
-      bot.boosting = false;
-    } else if (bot.segmentCount > 6 && bestDist > 225 && Math.random() < 0.03) {
-      bot.boosting = true;
-    } else if (bot.boosting && (bestDist < 25 || bot.segmentCount <= 4)) {
-      bot.boosting = false;
-      bot.boostCooldown = 3;
-    }
+    if (bot.boostCooldown > 0) { bot.boostCooldown -= dt; bot.boosting = false; }
+    else if (bot.segments.length > 6 && bestDist > 225 && Math.random() < 0.03) { bot.boosting = true; }
+    else if (bot.boosting && (bestDist < 25 || bot.segments.length <= 4)) { bot.boosting = false; bot.boostCooldown = 3; }
 
     var speed = bot.boosting ? BOOST_SPEED : BASE_SPEED;
     bot.headX += Math.cos(bot.angle) * speed * dt;
@@ -382,47 +334,32 @@
     bot.headX = clamp(bot.headX, 0, MAP_W);
     bot.headY = clamp(bot.headY, 0, MAP_H);
 
-    var rec = recordHistory(bot.history, bot.headX, bot.headY, bot.lastRecordX, bot.lastRecordY);
-    bot.lastRecordX = rec.lx;
-    bot.lastRecordY = rec.ly;
+    bot.segments[0].x = bot.headX;
+    bot.segments[0].y = bot.headY;
+    followLeader(bot.segments, bot.angle, bot.boosting, dt);
 
-    if (bot.headX <= 0 || bot.headX >= MAP_W || bot.headY <= 0 || bot.headY >= MAP_H) {
-      respawnBot(bot);
-      return;
+    if (bot.headX <= 0 || bot.headX >= MAP_W || bot.headY <= 0 || bot.headY >= MAP_H) { respawnBot(bot); return; }
+    for (var s = 4; s < bot.segments.length; s++) {
+      if (distSq(bot.headX, bot.headY, bot.segments[s].x, bot.segments[s].y) < HEAD_COL_SQ) { respawnBot(bot); return; }
     }
-
-    for (var s = 4; s < bot.segmentCount; s++) {
-      var pos = getHistory(bot.history, s * SPACING_SAMPLES);
-      if (pos && distSq(bot.headX, bot.headY, pos.x, pos.y) < HEAD_COL_SQ) {
-        respawnBot(bot);
-        return;
-      }
-    }
-
     if (playerAlive) {
-      for (var si = 1; si < segCount; si++) {
-        var sp = getHistory(snakeHistory, si * SPACING_SAMPLES);
-        if (sp && distSq(bot.headX, bot.headY, sp.x, sp.y) < HEAD_COL_SQ) {
-          respawnBot(bot);
-          return;
-        }
+      for (var si = 1; si < playerSegments.length; si++) {
+        if (distSq(bot.headX, bot.headY, playerSegments[si].x, playerSegments[si].y) < HEAD_COL_SQ) { respawnBot(bot); return; }
       }
-      if (headHitsSegments(bot.history, bot.segmentCount, 1)) {
-        diePlayer();
-        return;
-      }
+      if (headHitsSegments(bot.segments, 1)) { diePlayer(); return; }
     }
-
     var ate = 0;
     for (var fi = foods.length - 1; fi >= 0; fi--) {
       if (distSq(bot.headX, bot.headY, foods[fi].x, foods[fi].y) < PICKUP_SQ) {
-        foods.splice(fi, 1);
-        ate++;
+        foods.splice(fi, 1); ate++;
         if (foods.length < MAX_FOOD) foods.push(spawnFood());
       }
     }
     if (ate > 0) {
-      bot.segmentCount = Math.min(bot.segmentCount + ate, MAX_SEGMENTS);
+      for (var ai = 0; ai < ate && bot.segments.length < MAX_SEGMENTS; ai++) {
+        var bt = bot.segments[bot.segments.length - 1];
+        bot.segments.push({ x: bt.x, y: bt.y });
+      }
       bot.score += ate;
     }
   }
@@ -431,26 +368,10 @@
     var a = Math.random() * Math.PI * 2;
     var x = randFloat(SPAWN_MARGIN, MAP_W - SPAWN_MARGIN);
     var y = randFloat(SPAWN_MARGIN, MAP_H - SPAWN_MARGIN);
-    var h = createHistory(MAX_HISTORY);
-    for (var i = 1; i <= 4 * SPACING_SAMPLES + 4; i++) {
-      pushHistory(h, x - Math.cos(a) * RECORD_INTERVAL * i, y - Math.sin(a) * RECORD_INTERVAL * i);
-    }
-    bot.headX = x;
-    bot.headY = y;
-    bot.angle = a;
-    bot.targetAngle = a;
-    bot.history = h;
-    bot.lastRecordX = x;
-    bot.lastRecordY = y;
-    bot.segmentCount = 4;
-    bot.alive = true;
-    bot.score = 0;
-    bot.boosting = false;
-    bot.boostCooldown = 0;
+    bot.headX = x; bot.headY = y; bot.angle = a; bot.targetAngle = a;
+    bot.segments = createSegments(x, y, a, 4);
+    bot.alive = true; bot.score = 0; bot.boosting = false; bot.boostCooldown = 0;
   }
-
-  // ==================== RENDERING ====================
-
   function getCamera(followX, followY) {
     var cx = clamp(followX, viewW / 2, MAP_W - viewW / 2);
     var cy = clamp(followY, viewH / 2, MAP_H - viewH / 2);
@@ -460,19 +381,13 @@
   function drawGrid(cam) {
     ctx.strokeStyle = '#1a1a3a';
     ctx.lineWidth = 0.5;
-    var startX = Math.floor(cam.x / GRID_LINE_SPACING) * GRID_LINE_SPACING;
-    var startY = Math.floor(cam.y / GRID_LINE_SPACING) * GRID_LINE_SPACING;
-    for (var x = startX; x <= cam.x + viewW + GRID_LINE_SPACING; x += GRID_LINE_SPACING) {
-      ctx.beginPath();
-      ctx.moveTo(x - cam.x, 0);
-      ctx.lineTo(x - cam.x, viewH);
-      ctx.stroke();
+    var startX = Math.floor(cam.x / GRID_SPACING) * GRID_SPACING;
+    var startY = Math.floor(cam.y / GRID_SPACING) * GRID_SPACING;
+    for (var x = startX; x <= cam.x + viewW + GRID_SPACING; x += GRID_SPACING) {
+      ctx.beginPath(); ctx.moveTo(x - cam.x, 0); ctx.lineTo(x - cam.x, viewH); ctx.stroke();
     }
-    for (var y = startY; y <= cam.y + viewH + GRID_LINE_SPACING; y += GRID_LINE_SPACING) {
-      ctx.beginPath();
-      ctx.moveTo(0, y - cam.y);
-      ctx.lineTo(viewW, y - cam.y);
-      ctx.stroke();
+    for (var y = startY; y <= cam.y + viewH + GRID_SPACING; y += GRID_SPACING) {
+      ctx.beginPath(); ctx.moveTo(0, y - cam.y); ctx.lineTo(viewW, y - cam.y); ctx.stroke();
     }
   }
 
@@ -482,8 +397,114 @@
     ctx.strokeRect(-cam.x, -cam.y, MAP_W, MAP_H);
   }
 
-  function drawSnakeByData(segs, colorIdx, isPlayer, cam, totalSegs, isBoosting, hx, hy, hAngle) {
+  function drawSpikes(segR, spikeDef) {
+    if (!spikeDef) return;
+    var count = spikeDef.count;
+    var spikeLen = segR * spikeDef.len;
+    var spikeW = segR * spikeDef.width;
+    var span = segR * 0.7;
+    for (var side = -1; side <= 1; side += 2) {
+      for (var j = 0; j < count; j++) {
+        var offset = count === 1 ? 0 : (j / (count - 1) * 2 - 1) * span;
+        ctx.beginPath();
+        ctx.moveTo(offset - spikeW * 0.5, 0);
+        ctx.lineTo(offset + spikeW * 0.5, 0);
+        ctx.lineTo(offset, -spikeLen * side);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+  }
+
+  function drawScales(segR, scaleDef) {
+    if (!scaleDef) return;
+    var spacing = segR * scaleDef.freq;
+    ctx.globalAlpha = scaleDef.opacity;
+    for (var x = -segR + spacing * 0.5; x < segR; x += spacing) {
+      for (var side = -1; side <= 1; side += 2) {
+        ctx.beginPath();
+        ctx.arc(x, side * segR * 0.25, segR * 0.32, 0, Math.PI, side < 0);
+        ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawTailTip(segR, darkColor, tailStyle) {
+    if (tailStyle === 'stinger') {
+      ctx.beginPath();
+      ctx.moveTo(segR * 0.4, -segR * 0.3);
+      ctx.lineTo(segR * 0.4, segR * 0.3);
+      ctx.lineTo(segR * 1.4, 0);
+      ctx.closePath();
+      ctx.fill();
+    } else if (tailStyle === 'forked') {
+      ctx.beginPath();
+      ctx.moveTo(-segR * 0.2, 0);
+      ctx.lineTo(segR * 0.6, -segR * 0.7);
+      ctx.lineTo(segR * 0.8, -segR * 0.3);
+      ctx.lineTo(segR * 0.4, 0);
+      ctx.lineTo(segR * 0.8, segR * 0.3);
+      ctx.lineTo(segR * 0.6, segR * 0.7);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  function drawHeadFeatures(segR, rot, headStyle, pal) {
+    var fwdX = Math.cos(rot);
+    var fwdY = Math.sin(rot);
+    var perpX = -fwdY;
+    var perpY = fwdX;
+
+    if (headStyle === 'horns') {
+      ctx.fillStyle = pal.dark;
+      for (var side = -1; side <= 1; side += 2) {
+        var hx = -segR * 0.2;
+        var hy = side * segR * 0.55;
+        ctx.beginPath();
+        ctx.moveTo(hx, hy);
+        ctx.lineTo(hx - segR * 0.7, hy + side * segR * 0.4);
+        ctx.lineTo(hx - segR * 0.5, hy);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+
+    var eyeOff = segR * 0.35;
+    var eyeR = segR * 0.28;
+    var pupilR = eyeR * 0.55;
+    var e1x = fwdX * eyeOff + perpX * eyeOff * 0.6;
+    var e1y = fwdY * eyeOff + perpY * eyeOff * 0.6;
+    var e2x = fwdX * eyeOff - perpX * eyeOff * 0.6;
+    var e2y = fwdY * eyeOff - perpY * eyeOff * 0.6;
+
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(e1x, e1y, eyeR, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(e2x, e2y, eyeR, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#111';
+    ctx.beginPath(); ctx.arc(e1x + fwdX * 1.5, e1y + fwdY * 1.5, pupilR, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(e2x + fwdX * 1.5, e2y + fwdY * 1.5, pupilR, 0, Math.PI * 2); ctx.fill();
+
+    if (headStyle === 'fangs') {
+      ctx.fillStyle = '#fff';
+      for (var fs = -1; fs <= 1; fs += 2) {
+        var fx = fwdX * segR * 0.6 + perpX * segR * 0.2 * fs;
+        var fy = fwdY * segR * 0.6 + perpY * segR * 0.2 * fs;
+        ctx.beginPath();
+        ctx.moveTo(fx, fy);
+        ctx.lineTo(fx + fwdX * segR * 0.35 + perpX * segR * 0.08 * fs, fy + fwdY * segR * 0.35 + perpY * segR * 0.08 * fs);
+        ctx.lineTo(fx + perpX * segR * 0.06 * fs, fy + perpY * segR * 0.06 * fs);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+  }
+
+  function drawSnakeByData(segs, colorIdx, isPlayer, cam, isBoosting, hx, hy, hAngle, skinIdx) {
+    if (!Array.isArray(segs) || !segs.length) return;
     if (typeof hx !== 'number' || typeof hy !== 'number') return;
+
     var pal = PALETTE[colorIdx] || PALETTE[0];
     var pr = parseInt(pal.primary.slice(1, 3), 16);
     var pg = parseInt(pal.primary.slice(3, 5), 16);
@@ -491,65 +512,68 @@
     var dr = parseInt(pal.dark.slice(1, 3), 16);
     var dg = parseInt(pal.dark.slice(3, 5), 16);
     var db = parseInt(pal.dark.slice(5, 7), 16);
+    var n = segs.length;
+    var skin = SKINS[skinIdx || 0] || SKINS[0];
+    var now = performance.now();
 
-    if (Array.isArray(segs)) {
-      for (var i = segs.length - 1; i >= 0; i--) {
-        var seg = segs[i];
-        if (!seg || typeof seg.x !== 'number' || typeof seg.y !== 'number') continue;
-        var sx = seg.x - cam.x;
-        var sy = seg.y - cam.y;
-        if (sx < -20 || sx > viewW + 20 || sy < -20 || sy > viewH + 20) continue;
+    for (var i = n - 1; i >= 0; i--) {
+      var seg = segs[i];
+      if (!seg || typeof seg.x !== 'number' || typeof seg.y !== 'number') continue;
+      var sx = seg.x - cam.x;
+      var sy = seg.y - cam.y;
+      if (sx < -40 || sx > viewW + 40 || sy < -40 || sy > viewH + 40) continue;
 
-        var ratio = totalSegs > 1 ? 1 - (i / (totalSegs - 1)) * 0.5 : 1;
-        ctx.fillStyle = 'rgb(' + Math.floor(pr * ratio + dr * (1 - ratio)) + ',' +
-          Math.floor(pg * ratio + dg * (1 - ratio)) + ',' +
-          Math.floor(pb * ratio + db * (1 - ratio)) + ')';
+      var t = n > 1 ? i / (n - 1) : 0;
+      var scale = HEAD_SCALE * Math.pow(TAIL_SCALE_RATIO, t);
+      var segR = MAX_SEG_RADIUS * scale;
 
-        var segR = totalSegs > 1
-          ? MAX_SEG_RADIUS - (i / (totalSegs - 1)) * (MAX_SEG_RADIUS - MIN_SEG_RADIUS)
-          : MAX_SEG_RADIUS;
+      var colorRatio = 1 - t * 0.5;
+      var r = Math.floor(pr * colorRatio + dr * (1 - colorRatio));
+      var g = Math.floor(pg * colorRatio + dg * (1 - colorRatio));
+      var b = Math.floor(pb * colorRatio + db * (1 - colorRatio));
 
-        ctx.beginPath();
-        ctx.arc(sx, sy, segR, 0, Math.PI * 2);
-        ctx.fill();
+      var rot;
+      if (i === 0) { rot = hAngle; }
+      else { var prev = segs[i - 1]; rot = Math.atan2(prev.y - seg.y, prev.x - seg.x); }
+
+      if (isPlayer && i === 0) {
+        ctx.shadowColor = isBoosting ? '#ffaa00' : pal.primary;
+        ctx.shadowBlur = 14;
       }
+
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.rotate(rot);
+
+      ctx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
+      ctx.beginPath();
+      ctx.arc(0, 0, segR, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = 'rgb(' + Math.floor(r * 0.7) + ',' + Math.floor(g * 0.7) + ',' + Math.floor(b * 0.7) + ')';
+      ctx.lineWidth = Math.max(1, segR * 0.12);
+
+      if (skin.spikes && i > 0 && i < n - 1) {
+        ctx.fillStyle = 'rgb(' + Math.floor(r * 0.85) + ',' + Math.floor(g * 0.85) + ',' + Math.floor(b * 0.85) + ')';
+        drawSpikes(segR, skin.spikes);
+      }
+
+      if (skin.scales && i > 0) {
+        drawScales(segR, skin.scales);
+      }
+
+      if (i === n - 1 && skin.tail !== 'round') {
+        ctx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
+        drawTailTip(segR, pal.dark, skin.tail);
+      }
+
+      if (i === 0) {
+        drawHeadFeatures(segR, rot, skin.head, pal);
+      }
+
+      ctx.restore();
+      ctx.shadowBlur = 0;
     }
-
-    var hxs = hx - cam.x;
-    var hys = hy - cam.y;
-    if (hxs < -30 || hxs > viewW + 30 || hys < -30 || hys > viewH + 30) return;
-
-    if (isPlayer) {
-      ctx.shadowColor = isBoosting ? '#ffaa00' : pal.primary;
-      ctx.shadowBlur = 14;
-    }
-    ctx.fillStyle = pal.primary;
-    ctx.beginPath();
-    ctx.arc(hxs, hys, HEAD_RADIUS, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
-    if (typeof hAngle !== 'number') hAngle = 0;
-    var eyeOff = HEAD_RADIUS * 0.35;
-    var eyeR = HEAD_RADIUS * 0.28;
-    var pupilR = eyeR * 0.55;
-    var fwdX = Math.cos(hAngle);
-    var fwdY = Math.sin(hAngle);
-    var perpX = -fwdY;
-    var perpY = fwdX;
-
-    var e1x = hxs + fwdX * eyeOff + perpX * eyeOff * 0.6;
-    var e1y = hys + fwdY * eyeOff + perpY * eyeOff * 0.6;
-    var e2x = hxs + fwdX * eyeOff - perpX * eyeOff * 0.6;
-    var e2y = hys + fwdY * eyeOff - perpY * eyeOff * 0.6;
-
-    ctx.fillStyle = '#fff';
-    ctx.beginPath(); ctx.arc(e1x, e1y, eyeR, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(e2x, e2y, eyeR, 0, Math.PI * 2); ctx.fill();
-
-    ctx.fillStyle = '#111';
-    ctx.beginPath(); ctx.arc(e1x + fwdX * 1.5, e1y + fwdY * 1.5, pupilR, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(e2x + fwdX * 1.5, e2y + fwdY * 1.5, pupilR, 0, Math.PI * 2); ctx.fill();
   }
 
   function drawFoodList(foodList, cam) {
@@ -561,10 +585,8 @@
       var fx = f.x - cam.x;
       var fy = f.y - cam.y;
       if (fx < -20 || fx > viewW + 20 || fy < -20 || fy > viewH + 20) continue;
-
       var pulse = 1 + Math.sin(now / 300 + f.x * 0.1) * 0.2;
-      var r = (PICKUP_RADIUS * 0.45) * pulse;
-
+      var r = PICKUP_RADIUS * 0.45 * pulse;
       ctx.shadowColor = '#ff4444';
       ctx.shadowBlur = 8;
       ctx.fillStyle = '#ff4444';
@@ -577,21 +599,16 @@
 
   function drawBoostBar() {
     if (!boostBar) return;
-    var maxDisplay = 50;
-    var pct = Math.min(score / maxDisplay, 1);
+    var pct = Math.min(score / 50, 1);
     boostBar.style.width = (pct * 100) + '%';
     boostBar.style.background = boosting ? '#ffaa00' : '#00ff88';
   }
 
   function updateLeaderboardSingle() {
     var entries = [];
-    if (playerAlive) {
-      entries.push({ name: 'You', len: segCount });
-    }
+    if (playerAlive) entries.push({ name: 'You', len: playerSegments.length });
     for (var i = 0; i < bots.length; i++) {
-      if (bots[i].alive) {
-        entries.push({ name: 'Bot ' + (i + 1), len: bots[i].segmentCount });
-      }
+      if (bots[i].alive) entries.push({ name: 'Bot ' + (i + 1), len: bots[i].segments.length });
     }
     entries.sort(function(a, b) { return b.len - a.len; });
     var top = entries.slice(0, 5);
@@ -608,14 +625,9 @@
     drawFoodList(foods, cam);
     for (var i = 0; i < bots.length; i++) {
       var bot = bots[i];
-      if (!bot.alive) continue;
-      var botSegs = computeSegs(bot.history, bot.segmentCount);
-      drawSnakeByData(botSegs, bot.color, false, cam, bot.segmentCount, bot.boosting, bot.headX, bot.headY, bot.angle);
+      if (bot.alive) drawSnakeByData(bot.segments, bot.color, false, cam, bot.boosting, bot.headX, bot.headY, bot.angle, bot.skinIdx || 0);
     }
-    if (playerAlive) {
-      var playerSegs = computeSegs(snakeHistory, segCount);
-      drawSnakeByData(playerSegs, playerColorIdx, true, cam, segCount, boosting, headX, headY, angle);
-    }
+    if (playerAlive) drawSnakeByData(playerSegments, playerColorIdx, true, cam, boosting, headX, headY, angle, playerSkinIdx);
     updateLeaderboardSingle();
     drawBoostBar();
   }
@@ -630,9 +642,8 @@
     if (Array.isArray(remoteSnakes)) {
       for (var i = 0; i < remoteSnakes.length; i++) {
         var rs = remoteSnakes[i];
-        if (!rs || rs.id === myId) continue;
-        if (!Array.isArray(rs.segments) || !rs.segments.length) continue;
-        drawSnakeByData(rs.segments, rs.color, false, cam, rs.segments.length, rs.boosting, rs.x, rs.y, rs.angle);
+        if (!rs || rs.id === myId || !Array.isArray(rs.segments) || !rs.segments.length) continue;
+        drawSnakeByData(rs.segments, rs.color, false, cam, rs.boosting, rs.x, rs.y, rs.angle, rs.skinIdx || 0);
       }
     }
     if (playerAlive && myId) {
@@ -643,26 +654,20 @@
         }
       }
       if (me && Array.isArray(me.segments)) {
-        drawSnakeByData(me.segments, me.color, true, cam, me.segments.length, boosting, me.x, me.y, me.angle);
+        drawSnakeByData(me.segments, me.color, true, cam, boosting, me.x, me.y, me.angle, playerSkinIdx);
       }
     }
     drawBoostBar();
   }
-
-  // ==================== GAME LOOPS ====================
 
   function loopSingle(timestamp) {
     if (!running) return;
     if (lastTime === 0) lastTime = timestamp;
     var dt = Math.min((timestamp - lastTime) / 1000, 0.1);
     lastTime = timestamp;
-
     computeKeyboardTarget();
     updatePlayer(dt);
-    for (var i = 0; i < bots.length; i++) {
-      updateBot(bots[i], dt);
-    }
-
+    for (var i = 0; i < bots.length; i++) updateBot(bots[i], dt);
     try { drawFrameSingle(); } catch (e) { console.error('drawSingle error', e); }
     animFrameId = requestAnimationFrame(loopSingle);
   }
@@ -671,10 +676,8 @@
     if (!running) return;
     if (lastTime === 0) lastTime = timestamp;
     lastTime = timestamp;
-
     computeKeyboardTarget();
     sendAngle();
-
     try { drawFrameMulti(); } catch (e) { console.error('drawMulti error', e); }
     animFrameId = requestAnimationFrame(loopMulti);
   }
@@ -697,7 +700,7 @@
     headY = MAP_H / 2;
     angle = 0;
     targetAngle = 0;
-    segCount = 4;
+    playerSegments = createSegments(headX, headY, 0, 4);
     score = 0;
     boosting = false;
     playerAlive = false;
@@ -745,14 +748,9 @@
       animFrameId = requestAnimationFrame(loopMulti);
       return;
     }
-    if (gameMode === 'single') {
-      startSinglePlayer();
-    } else {
-      startMultiplayer();
-    }
+    if (gameMode === 'single') startSinglePlayer();
+    else startMultiplayer();
   }
-
-  // ==================== KEYBOARD INPUT ====================
 
   function computeKeyboardTarget() {
     var kx = 0, ky = 0;
@@ -760,9 +758,7 @@
     if (keys['arrowright'] || keys['d']) kx += 1;
     if (keys['arrowup'] || keys['w']) ky -= 1;
     if (keys['arrowdown'] || keys['s']) ky += 1;
-    if ((kx !== 0 || ky !== 0) && !mouseActive) {
-      targetAngle = Math.atan2(ky, kx);
-    }
+    if ((kx !== 0 || ky !== 0) && !mouseActive) targetAngle = Math.atan2(ky, kx);
   }
 
   document.addEventListener('keydown', function(e) {
@@ -770,10 +766,7 @@
     if (!playerAlive) return;
     var key = e.key.toLowerCase();
     if (key === ' ' || key === 'shift') {
-      if (score >= MIN_BOOST_SCORE) {
-        boosting = true;
-        if (gameMode === 'multi') sendBoost(true);
-      }
+      if (score >= MIN_BOOST_SCORE) { boosting = true; if (gameMode === 'multi') sendBoost(true); }
       e.preventDefault();
     }
   });
@@ -781,52 +774,31 @@
   document.addEventListener('keyup', function(e) {
     keys[e.key.toLowerCase()] = false;
     var key = e.key.toLowerCase();
-    if (key === ' ' || key === 'shift') {
-      boosting = false;
-      if (gameMode === 'multi') sendBoost(false);
-    }
+    if (key === ' ' || key === 'shift') { boosting = false; if (gameMode === 'multi') sendBoost(false); }
   });
-
-  // ==================== MOUSE INPUT ====================
 
   canvas.addEventListener('mousemove', function(e) {
     if (!playerAlive || !running) return;
     mouseActive = true;
-    if (gameMode === 'single') {
-      var cam = getCamera(headX, headY);
-      var worldX = e.clientX + cam.x;
-      var worldY = e.clientY + cam.y;
-      targetAngle = Math.atan2(worldY - headY, worldX - headX);
-    } else if (gameMode === 'multi') {
-      var camM = getCamera(headX, headY);
-      var wx = e.clientX + camM.x;
-      var wy = e.clientY + camM.y;
-      targetAngle = Math.atan2(wy - headY, wx - headX);
-    }
+    var cam = getCamera(headX, headY);
+    var wx = e.clientX + cam.x;
+    var wy = e.clientY + cam.y;
+    targetAngle = Math.atan2(wy - headY, wx - headX);
   });
 
   canvas.addEventListener('mousedown', function(e) {
     if (!playerAlive || !running) return;
-    if (e.button === 0) {
-      if (score >= MIN_BOOST_SCORE) {
-        boosting = true;
-        if (gameMode === 'multi') sendBoost(true);
-      }
+    if (e.button === 0 && score >= MIN_BOOST_SCORE) {
+      boosting = true;
+      if (gameMode === 'multi') sendBoost(true);
     }
   });
 
   canvas.addEventListener('mouseup', function(e) {
-    if (e.button === 0) {
-      boosting = false;
-      if (gameMode === 'multi') sendBoost(false);
-    }
+    if (e.button === 0) { boosting = false; if (gameMode === 'multi') sendBoost(false); }
   });
 
-  canvas.addEventListener('mouseleave', function() {
-    mouseActive = false;
-  });
-
-  // ==================== TOUCH INPUT ====================
+  canvas.addEventListener('mouseleave', function() { mouseActive = false; });
 
   var touchId = null;
   var touchCenter = { x: 0, y: 0 };
@@ -850,10 +822,7 @@
         joystickBase.classList.add('active');
       } else if (!inBottom && boostTouchId === null) {
         boostTouchId = touch.identifier;
-        if (score >= MIN_BOOST_SCORE) {
-          boosting = true;
-          if (gameMode === 'multi') sendBoost(true);
-        }
+        if (score >= MIN_BOOST_SCORE) { boosting = true; if (gameMode === 'multi') sendBoost(true); }
       }
     }
   }
@@ -871,13 +840,8 @@
       var joyAngle = Math.atan2(dy, dx);
       var kx = Math.cos(joyAngle) * clamped;
       var ky = Math.sin(joyAngle) * clamped;
-
       joystickKnob.style.transform = 'translate(' + kx + 'px,' + ky + 'px)';
-
-      if (d > 10) {
-        mouseActive = false;
-        targetAngle = joyAngle;
-      }
+      if (d > 10) { mouseActive = false; targetAngle = joyAngle; }
     }
   }
 
@@ -903,64 +867,38 @@
   joystickZone.addEventListener('touchend', handleTouchEnd, { passive: false });
   joystickZone.addEventListener('touchcancel', handleTouchEnd, { passive: false });
 
-  // ==================== MULTIPLAYER ====================
-
   function preconnectMultiplayer() {
     if (ws && ws.readyState <= 1) return;
     statusMsg.textContent = 'Connecting to server...';
     wsConnected = false;
-
-    try {
-      ws = new WebSocket(WS_URL);
-    } catch (e) {
-      statusMsg.textContent = 'Connection failed';
-      return;
-    }
+    try { ws = new WebSocket(WS_URL); } catch (e) { statusMsg.textContent = 'Connection failed'; return; }
 
     ws.onopen = function() {
       wsConnected = true;
       statusMsg.textContent = 'Connected! Press Play to join.';
-      if (pendingJoin) {
-        pendingJoin = false;
-        joinMultiplayer();
-      }
+      if (pendingJoin) { pendingJoin = false; joinMultiplayer(); }
     };
-
     ws.onmessage = function(evt) {
       var msg;
       try { msg = JSON.parse(evt.data); } catch (e) { return; }
       handleServerMessage(msg);
     };
-
     ws.onclose = function() {
       wsConnected = false;
       if (gameMode === 'multi') {
         statusMsg.textContent = 'Disconnected. Reconnecting...';
-        setTimeout(function() {
-          if (gameMode === 'multi') preconnectMultiplayer();
-        }, 2000);
-      } else {
-        statusMsg.textContent = '';
-      }
+        setTimeout(function() { if (gameMode === 'multi') preconnectMultiplayer(); }, 2000);
+      } else { statusMsg.textContent = ''; }
     };
-
-    ws.onerror = function() {
-      statusMsg.textContent = 'Connection failed';
-    };
+    ws.onerror = function() { statusMsg.textContent = 'Connection failed'; };
   }
 
   function joinMultiplayer() {
     var name = playerNameInput.value.trim() || 'Player';
     localStorage.setItem('snake-io-name', name);
-
-    if (!wsConnected || !ws || ws.readyState !== 1) {
-      pendingJoin = true;
-      preconnectMultiplayer();
-      return;
-    }
-
+    if (!wsConnected || !ws || ws.readyState !== 1) { pendingJoin = true; preconnectMultiplayer(); return; }
     pendingJoin = false;
-    ws.send(JSON.stringify({ type: 'join', color: playerColorIdx, name: name }));
+    ws.send(JSON.stringify({ type: 'join', color: playerColorIdx, name: name, skinIdx: playerSkinIdx }));
   }
 
   function handleServerMessage(msg) {
@@ -972,7 +910,6 @@
         playerAlive = true;
         overlay.classList.remove('active');
         break;
-
       case 'state':
         remoteSnakes = msg.snakes || [];
         remoteFoods = msg.foods || [];
@@ -984,12 +921,10 @@
           headX = me.x;
           headY = me.y;
           angle = me.angle;
-          segCount = me.segments ? me.segments.length : 0;
           score = me.score;
           scoreEl.textContent = 'Score: ' + Math.round(score);
         }
         break;
-
       case 'leaderboard':
         if (msg.entries) {
           var top = msg.entries.slice(0, 8);
@@ -1000,17 +935,14 @@
             }).join('<br/>');
         }
         break;
-
       case 'died':
         playerAlive = false;
         score = msg.score || 0;
         gameOverMulti();
         break;
-
       case 'playerJoin':
       case 'playerLeave':
         break;
-
       case 'error':
         statusMsg.textContent = msg.message || 'Server error';
         break;
@@ -1026,22 +958,12 @@
   }
 
   function sendBoost(on) {
-    try {
-      if (ws && ws.readyState === 1) {
-        ws.send(JSON.stringify({ type: 'boost', on: on }));
-      }
-    } catch (e) {}
+    try { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'boost', on: on })); } catch (e) {}
   }
 
   function sendRespawn() {
-    try {
-      if (ws && ws.readyState === 1) {
-        ws.send(JSON.stringify({ type: 'respawn' }));
-      }
-    } catch (e) {}
+    try { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'respawn' })); } catch (e) {}
   }
-
-  // ==================== START ====================
 
   startBtn.addEventListener('click', startGame);
 })();

@@ -13,10 +13,11 @@ const MAP_H = 4000;
 const BASE_SPEED = 120;
 const BOOST_SPEED = 220;
 const ROTATION_SPEED = 3.0;
-const RECORD_INTERVAL = 4;
-const SEGMENT_SPACING = 12;
-const SPACING_SAMPLES = 3;
-const MAX_HISTORY = 1000;
+const STIFFNESS = 15;
+const BASE_SEGMENT_DISTANCE = 14;
+const BOOST_STRETCH = 1.35;
+const COMPRESSION_THRESHOLD = 0.3;
+const COMPRESSION_MIN = 0.55;
 const HEAD_RADIUS = 10;
 const SEGMENT_RADIUS = 8;
 const PICKUP_RADIUS = 14;
@@ -48,22 +49,6 @@ let nextId = 1;
 const players = new Map();
 let foods = [];
 
-function createHistory(cap) {
-  return { buf: new Float32Array(cap * 2), head: 0, count: 0, capacity: cap };
-}
-function pushHistory(h, x, y) {
-  h.buf[h.head * 2] = x;
-  h.buf[h.head * 2 + 1] = y;
-  h.head = (h.head + 1) % h.capacity;
-  if (h.count < h.capacity) h.count++;
-}
-function getHistory(h, index) {
-  if (index >= h.count) return null;
-  const i = (h.head - 1 - index + h.capacity) % h.capacity;
-  return { x: h.buf[i * 2], y: h.buf[i * 2 + 1] };
-}
-function clearHistory(h) { h.head = 0; h.count = 0; }
-
 function distSq(x1, y1, x2, y2) {
   const dx = x1 - x2, dy = y1 - y2;
   return dx * dx + dy * dy;
@@ -78,6 +63,41 @@ function angleDiff(a, b) {
 
 function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 
+function followLeader(segments, headAngle, isBoosting, dt) {
+  const t = 1 - Math.exp(-STIFFNESS * dt);
+
+  const rots = new Array(segments.length);
+  rots[0] = headAngle;
+  for (let i = 1; i < segments.length; i++) {
+    rots[i] = Math.atan2(segments[i - 1].y - segments[i].y, segments[i - 1].x - segments[i].x);
+  }
+
+  for (let i = 1; i < segments.length; i++) {
+    let restDist = isBoosting
+      ? BASE_SEGMENT_DISTANCE * BOOST_STRETCH
+      : BASE_SEGMENT_DISTANCE;
+
+    if (i >= 2) {
+      const angleDelta = Math.abs(angleDiff(rots[i - 1], rots[i]));
+      if (angleDelta > COMPRESSION_THRESHOLD) {
+        const tc = clamp((angleDelta - COMPRESSION_THRESHOLD) / (Math.PI * 0.5), 0, 1);
+        restDist *= 1.0 - tc * (1.0 - COMPRESSION_MIN);
+      }
+    }
+
+    const prev = segments[i - 1];
+    const curr = segments[i];
+    const dx = prev.x - curr.x;
+    const dy = prev.y - curr.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist > 0.001) {
+      const ratio = restDist / dist;
+      curr.x += (prev.x - dx * ratio - curr.x) * t;
+      curr.y += (prev.y - dy * ratio - curr.y) * t;
+    }
+  }
+}
+
 function spawnFood(x, y) {
   return {
     x: x !== undefined ? x : Math.random() * MAP_W,
@@ -90,62 +110,46 @@ function initFood() {
   for (let i = 0; i < FOOD_COUNT; i++) foods.push(spawnFood());
 }
 
-function initSnakeHistory(h, x, y, angle, count) {
-  for (let i = 1; i <= count * SPACING_SAMPLES + 4; i++) {
-    pushHistory(h, x - Math.cos(angle) * RECORD_INTERVAL * i, y - Math.sin(angle) * RECORD_INTERVAL * i);
-  }
-}
-
 function spawnPlayer(id, color) {
   const angle = Math.random() * Math.PI * 2;
   const sx = SPAWN_MARGIN + Math.random() * (MAP_W - SPAWN_MARGIN * 2);
   const sy = SPAWN_MARGIN + Math.random() * (MAP_H - SPAWN_MARGIN * 2);
-  const history = createHistory(MAX_HISTORY);
-  initSnakeHistory(history, sx, sy, angle, 10);
+
+  const segments = [];
+  for (let i = 0; i < 4; i++) {
+    segments.push({
+      x: sx - Math.cos(angle) * BASE_SEGMENT_DISTANCE * i,
+      y: sy - Math.sin(angle) * BASE_SEGMENT_DISTANCE * i,
+    });
+  }
+
   return {
-    id, name: 'Player', headX: sx, headY: sy, angle, targetAngle: angle,
-    history, lastRecordX: sx, lastRecordY: sy,
-    segmentCount: 4, color: color % PALETTE.length,
-    alive: true, score: 0, boosting: false, ws: null, deathNotified: false,
+    id, name: 'Player',
+    headX: sx, headY: sy,
+    angle, targetAngle: angle,
+    segments,
+    color: color % PALETTE.length,
+    skinIdx: 0,
+    alive: true, score: 0, boosting: false,
+    ws: null, deathNotified: false,
   };
 }
 
-function recordHistory(p) {
-  const dx = p.headX - p.lastRecordX;
-  const dy = p.headY - p.lastRecordY;
-  if (dx * dx + dy * dy >= RECORD_INTERVAL * RECORD_INTERVAL) {
-    pushHistory(p.history, p.headX, p.headY);
-    p.lastRecordX = p.headX;
-    p.lastRecordY = p.headY;
-  }
-}
-
-function computeSegments(history, segCount) {
-  const segs = [];
-  for (let i = 0; i < segCount; i++) {
-    const pos = getHistory(history, (i + 1) * SPACING_SAMPLES);
-    if (!pos) break;
-    segs.push({ x: Math.round(pos.x * 10) / 10, y: Math.round(pos.y * 10) / 10 });
-  }
-  return segs;
-}
-
 function dropFoodFromSnake(p) {
-  const count = Math.floor(p.segmentCount * DROP_FOOD_RATIO);
+  const count = Math.floor(p.segments.length * DROP_FOOD_RATIO);
   if (count === 0) return;
-  const step = Math.max(1, Math.floor(p.segmentCount / count));
+  const step = Math.max(1, Math.floor(p.segments.length / count));
   let placed = 0;
-  for (let i = 0; i < p.segmentCount && placed < count; i += step) {
-    const pos = getHistory(p.history, (i + 1) * SPACING_SAMPLES);
-    if (pos && foods.length < MAX_FOOD) {
-      foods.push(spawnFood(pos.x, pos.y));
+  for (let i = 0; i < p.segments.length && placed < count; i += step) {
+    if (foods.length < MAX_FOOD) {
+      foods.push(spawnFood(p.segments[i].x, p.segments[i].y));
       placed++;
     }
   }
 }
 
 const PICKUP_SQ = PICKUP_RADIUS * PICKUP_RADIUS;
-const HEAD_COL_SQ = (HEAD_RADIUS + SEGMENT_RADIUS) ** 2;
+const HEAD_COL_SQ = (HEAD_RADIUS + SEGMENT_RADIUS) * (HEAD_RADIUS + SEGMENT_RADIUS);
 
 function updatePlayer(p, dt) {
   if (!p.alive) return;
@@ -167,7 +171,10 @@ function updatePlayer(p, dt) {
   p.headY += Math.sin(p.angle) * speed * dt;
   p.headX = clamp(p.headX, 0, MAP_W);
   p.headY = clamp(p.headY, 0, MAP_H);
-  recordHistory(p);
+
+  p.segments[0].x = p.headX;
+  p.segments[0].y = p.headY;
+  followLeader(p.segments, p.angle, p.boosting, dt);
 
   if (p.headX <= 0 || p.headX >= MAP_W || p.headY <= 0 || p.headY >= MAP_H) {
     p.alive = false;
@@ -175,9 +182,9 @@ function updatePlayer(p, dt) {
     return;
   }
 
-  for (let i = 4; i < p.segmentCount; i++) {
-    const pos = getHistory(p.history, i * SPACING_SAMPLES);
-    if (pos && distSq(p.headX, p.headY, pos.x, pos.y) < HEAD_COL_SQ) {
+  for (let i = 4; i < p.segments.length; i++) {
+    const seg = p.segments[i];
+    if (distSq(p.headX, p.headY, seg.x, seg.y) < HEAD_COL_SQ) {
       p.alive = false;
       dropFoodFromSnake(p);
       return;
@@ -186,9 +193,9 @@ function updatePlayer(p, dt) {
 
   for (const other of players.values()) {
     if (other.id === p.id || !other.alive) continue;
-    for (let i = 1; i < other.segmentCount; i++) {
-      const pos = getHistory(other.history, i * SPACING_SAMPLES);
-      if (pos && distSq(p.headX, p.headY, pos.x, pos.y) < HEAD_COL_SQ) {
+    for (let i = 1; i < other.segments.length; i++) {
+      const seg = other.segments[i];
+      if (distSq(p.headX, p.headY, seg.x, seg.y) < HEAD_COL_SQ) {
         p.alive = false;
         dropFoodFromSnake(p);
         return;
@@ -206,7 +213,10 @@ function updatePlayer(p, dt) {
     }
   }
   if (ate > 0) {
-    p.segmentCount = Math.min(p.segmentCount + ate, MAX_SEGMENTS);
+    for (let a = 0; a < ate && p.segments.length < MAX_SEGMENTS; a++) {
+      const tail = p.segments[p.segments.length - 1];
+      p.segments.push({ x: tail.x, y: tail.y });
+    }
     p.score += ate;
   }
 }
@@ -235,19 +245,37 @@ function gameLoop() {
   for (const p of players.values()) {
     if (p.alive) {
       snakes.push({
-        id: p.id, name: p.name, x: Math.round(p.headX * 10) / 10,
-        y: Math.round(p.headY * 10) / 10, angle: Math.round(p.angle * 1000) / 1000,
-        color: p.color, score: Math.round(p.score), boosting: p.boosting,
-        segments: computeSegments(p.history, p.segmentCount),
+        id: p.id, name: p.name,
+        x: Math.round(p.headX * 10) / 10,
+        y: Math.round(p.headY * 10) / 10,
+        angle: Math.round(p.angle * 1000) / 1000,
+        color: p.color,
+        skinIdx: p.skinIdx || 0,
+        score: Math.round(p.score),
+        boosting: p.boosting,
+        segments: p.segments.map(s => ({
+          x: Math.round(s.x * 10) / 10,
+          y: Math.round(s.y * 10) / 10,
+        })),
       });
     }
   }
-  broadcast({ type: 'state', snakes, foods: foods.map(f => ({ x: Math.round(f.x), y: Math.round(f.y) })) });
+  broadcast({
+    type: 'state',
+    snakes,
+    foods: foods.map(f => ({ x: Math.round(f.x), y: Math.round(f.y) })),
+  });
 
   if (tickCount % 10 === 0) {
     const entries = [];
     for (const p of players.values()) {
-      if (p.alive) entries.push({ id: p.id, name: p.name, score: Math.round(p.score), len: p.segmentCount });
+      if (p.alive) {
+        entries.push({
+          id: p.id, name: p.name,
+          score: Math.round(p.score),
+          len: p.segments.length,
+        });
+      }
     }
     entries.sort((a, b) => b.len - a.len);
     broadcast({ type: 'leaderboard', entries: entries.slice(0, 10) });
@@ -278,8 +306,10 @@ wss.on('connection', (ws) => {
     if (msg.type === 'join') {
       const color = typeof msg.color === 'number' ? msg.color : 0;
       const name = typeof msg.name === 'string' ? msg.name.slice(0, 16) : 'Player';
+      const skinIdx = typeof msg.skinIdx === 'number' ? msg.skinIdx : 0;
       const p = spawnPlayer(id, color);
       p.name = name;
+      p.skinIdx = skinIdx;
       p.ws = ws;
       players.set(id, p);
       ws.send(JSON.stringify({ type: 'welcome', id, config: { MAP_W, MAP_H } }));
