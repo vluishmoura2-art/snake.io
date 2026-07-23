@@ -14,7 +14,8 @@ const BASE_SPEED = 120;
 const BOOST_SPEED = 220;
 const ROTATION_SPEED = 3.0;
 const STIFFNESS = 15;
-const BASE_SEGMENT_DISTANCE = 23.625;
+const SEGMENT_GAP_RATIO = 0.10;
+const BASE_SEGMENT_DISTANCE = 28.875; // 2 * SEGMENT_RADIUS * (1 + SEGMENT_GAP_RATIO)
 const BOOST_STRETCH = 1.35;
 const COMPRESSION_THRESHOLD = 0.3;
 const COMPRESSION_MIN = 0.55;
@@ -81,7 +82,10 @@ function followLeader(segments, headAngle, isBoosting, dt) {
       const angleDelta = Math.abs(angleDiff(rots[i - 1], rots[i]));
       if (angleDelta > COMPRESSION_THRESHOLD) {
         const tc = clamp((angleDelta - COMPRESSION_THRESHOLD) / (Math.PI * 0.5), 0, 1);
-        restDist *= 1.0 - tc * (1.0 - COMPRESSION_MIN);
+        restDist = Math.max(
+          BASE_SEGMENT_DISTANCE,
+          restDist * (1.0 - tc * (1.0 - COMPRESSION_MIN))
+        );
       }
     }
 
