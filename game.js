@@ -21,14 +21,10 @@
   var BASE_SPEED = 120;
   var BOOST_SPEED = 220;
   var ROTATION_SPEED = 3.0;
-  var STIFFNESS = 15;
-  var SEGMENT_GAP_RATIO = 0.10;
-  var BASE_SEGMENT_DISTANCE = 28.875; // 2 * SEGMENT_RADIUS * (1 + SEGMENT_GAP_RATIO)
-  var BOOST_STRETCH = 1.35;
-  var COMPRESSION_THRESHOLD = 0.3;
-  var COMPRESSION_MIN = 0.55;
   var HEAD_RADIUS = 10;
   var SEGMENT_RADIUS = 13.125;
+  var SEGMENT_OVERLAP_RATIO = 0.10;
+  var BASE_SEGMENT_DISTANCE = SEGMENT_RADIUS * 2 * (1 - SEGMENT_OVERLAP_RATIO);
   var PICKUP_RADIUS = 14;
   var FOOD_COUNT = 150;
   var MAX_FOOD = 500;
@@ -168,36 +164,37 @@
     return segs;
   }
 
-  function followLeader(segments, headAngle, isBoosting, dt) {
-    var t = 1 - Math.exp(-STIFFNESS * dt);
-    var rots = new Array(segments.length);
-    rots[0] = headAngle;
-    for (var ri = 1; ri < segments.length; ri++) {
-      rots[ri] = Math.atan2(segments[ri - 1].y - segments[ri].y, segments[ri - 1].x - segments[ri].x);
-    }
+  function followLeader(segments, headAngle) {
     for (var i = 1; i < segments.length; i++) {
-      var restDist = isBoosting ? BASE_SEGMENT_DISTANCE * BOOST_STRETCH : BASE_SEGMENT_DISTANCE;
-      if (i >= 2) {
-        var angleDelta = Math.abs(angleDiff(rots[i - 1], rots[i]));
-        if (angleDelta > COMPRESSION_THRESHOLD) {
-          var tc = clamp((angleDelta - COMPRESSION_THRESHOLD) / (Math.PI * 0.5), 0, 1);
-          restDist = Math.max(
-            BASE_SEGMENT_DISTANCE,
-            restDist * (1.0 - tc * (1.0 - COMPRESSION_MIN))
-          );
-        }
-      }
       var prev = segments[i - 1];
       var curr = segments[i];
       var dx = prev.x - curr.x;
       var dy = prev.y - curr.y;
       var dist = Math.sqrt(dx * dx + dy * dy);
+      var direction;
       if (dist > 0.001) {
-        var ratio = restDist / dist;
-        curr.x += (prev.x - dx * ratio - curr.x) * t;
-        curr.y += (prev.y - dy * ratio - curr.y) * t;
+        direction = Math.atan2(dy, dx);
+      } else {
+        var leaderAngle = i === 1
+          ? headAngle
+          : Math.atan2(segments[i - 2].y - prev.y, segments[i - 2].x - prev.x);
+        direction = leaderAngle;
       }
+      curr.x = prev.x - Math.cos(direction) * BASE_SEGMENT_DISTANCE;
+      curr.y = prev.y - Math.sin(direction) * BASE_SEGMENT_DISTANCE;
     }
+  }
+
+  function addTailSegment(segments, fallbackAngle) {
+    var tail = segments[segments.length - 1];
+    var beforeTail = segments[segments.length - 2];
+    var tailAngle = beforeTail
+      ? Math.atan2(beforeTail.y - tail.y, beforeTail.x - tail.x)
+      : fallbackAngle;
+    segments.push({
+      x: tail.x - Math.cos(tailAngle) * BASE_SEGMENT_DISTANCE,
+      y: tail.y - Math.sin(tailAngle) * BASE_SEGMENT_DISTANCE
+    });
   }
 
   function spawnFood(x, y) {
@@ -275,7 +272,7 @@
 
     playerSegments[0].x = headX;
     playerSegments[0].y = headY;
-    followLeader(playerSegments, angle, boosting, dt);
+    followLeader(playerSegments, angle);
 
     if (headX <= 0 || headX >= MAP_W || headY <= 0 || headY >= MAP_H) { diePlayer(); return; }
     for (var b = 0; b < bots.length; b++) {
@@ -291,8 +288,7 @@
     }
     if (ate > 0) {
       for (var a = 0; a < ate && playerSegments.length < MAX_SEGMENTS; a++) {
-        var tail = playerSegments[playerSegments.length - 1];
-        playerSegments.push({ x: tail.x, y: tail.y });
+        addTailSegment(playerSegments, angle);
       }
       score += ate;
     }
@@ -336,7 +332,7 @@
 
     bot.segments[0].x = bot.headX;
     bot.segments[0].y = bot.headY;
-    followLeader(bot.segments, bot.angle, bot.boosting, dt);
+    followLeader(bot.segments, bot.angle);
 
     if (bot.headX <= 0 || bot.headX >= MAP_W || bot.headY <= 0 || bot.headY >= MAP_H) { respawnBot(bot); return; }
     if (playerAlive) {
@@ -354,8 +350,7 @@
     }
     if (ate > 0) {
       for (var ai = 0; ai < ate && bot.segments.length < MAX_SEGMENTS; ai++) {
-        var bt = bot.segments[bot.segments.length - 1];
-        bot.segments.push({ x: bt.x, y: bt.y });
+        addTailSegment(bot.segments, bot.angle);
       }
       bot.score += ate;
     }

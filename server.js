@@ -13,14 +13,10 @@ const MAP_H = 4000;
 const BASE_SPEED = 120;
 const BOOST_SPEED = 220;
 const ROTATION_SPEED = 3.0;
-const STIFFNESS = 15;
-const SEGMENT_GAP_RATIO = 0.10;
-const BASE_SEGMENT_DISTANCE = 28.875; // 2 * SEGMENT_RADIUS * (1 + SEGMENT_GAP_RATIO)
-const BOOST_STRETCH = 1.35;
-const COMPRESSION_THRESHOLD = 0.3;
-const COMPRESSION_MIN = 0.55;
 const HEAD_RADIUS = 10;
 const SEGMENT_RADIUS = 13.125;
+const SEGMENT_OVERLAP_RATIO = 0.10;
+const BASE_SEGMENT_DISTANCE = SEGMENT_RADIUS * 2 * (1 - SEGMENT_OVERLAP_RATIO);
 const PICKUP_RADIUS = 14;
 const FOOD_COUNT = 150;
 const MAX_FOOD = 500;
@@ -64,42 +60,37 @@ function angleDiff(a, b) {
 
 function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 
-function followLeader(segments, headAngle, isBoosting, dt) {
-  const t = 1 - Math.exp(-STIFFNESS * dt);
-
-  const rots = new Array(segments.length);
-  rots[0] = headAngle;
+function followLeader(segments, headAngle) {
   for (let i = 1; i < segments.length; i++) {
-    rots[i] = Math.atan2(segments[i - 1].y - segments[i].y, segments[i - 1].x - segments[i].x);
-  }
-
-  for (let i = 1; i < segments.length; i++) {
-    let restDist = isBoosting
-      ? BASE_SEGMENT_DISTANCE * BOOST_STRETCH
-      : BASE_SEGMENT_DISTANCE;
-
-    if (i >= 2) {
-      const angleDelta = Math.abs(angleDiff(rots[i - 1], rots[i]));
-      if (angleDelta > COMPRESSION_THRESHOLD) {
-        const tc = clamp((angleDelta - COMPRESSION_THRESHOLD) / (Math.PI * 0.5), 0, 1);
-        restDist = Math.max(
-          BASE_SEGMENT_DISTANCE,
-          restDist * (1.0 - tc * (1.0 - COMPRESSION_MIN))
-        );
-      }
-    }
-
     const prev = segments[i - 1];
     const curr = segments[i];
     const dx = prev.x - curr.x;
     const dy = prev.y - curr.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
+    let direction;
     if (dist > 0.001) {
-      const ratio = restDist / dist;
-      curr.x += (prev.x - dx * ratio - curr.x) * t;
-      curr.y += (prev.y - dy * ratio - curr.y) * t;
+      direction = Math.atan2(dy, dx);
+    } else {
+      const leaderAngle = i === 1
+        ? headAngle
+        : Math.atan2(segments[i - 2].y - prev.y, segments[i - 2].x - prev.x);
+      direction = leaderAngle;
     }
+    curr.x = prev.x - Math.cos(direction) * BASE_SEGMENT_DISTANCE;
+    curr.y = prev.y - Math.sin(direction) * BASE_SEGMENT_DISTANCE;
   }
+}
+
+function addTailSegment(segments, fallbackAngle) {
+  const tail = segments[segments.length - 1];
+  const beforeTail = segments[segments.length - 2];
+  const tailAngle = beforeTail
+    ? Math.atan2(beforeTail.y - tail.y, beforeTail.x - tail.x)
+    : fallbackAngle;
+  segments.push({
+    x: tail.x - Math.cos(tailAngle) * BASE_SEGMENT_DISTANCE,
+    y: tail.y - Math.sin(tailAngle) * BASE_SEGMENT_DISTANCE,
+  });
 }
 
 function spawnFood(x, y) {
@@ -178,7 +169,7 @@ function updatePlayer(p, dt) {
 
   p.segments[0].x = p.headX;
   p.segments[0].y = p.headY;
-  followLeader(p.segments, p.angle, p.boosting, dt);
+  followLeader(p.segments, p.angle);
 
   if (p.headX <= 0 || p.headX >= MAP_W || p.headY <= 0 || p.headY >= MAP_H) {
     p.alive = false;
@@ -209,8 +200,7 @@ function updatePlayer(p, dt) {
   }
   if (ate > 0) {
     for (let a = 0; a < ate && p.segments.length < MAX_SEGMENTS; a++) {
-      const tail = p.segments[p.segments.length - 1];
-      p.segments.push({ x: tail.x, y: tail.y });
+      addTailSegment(p.segments, p.angle);
     }
     p.score += ate;
   }
