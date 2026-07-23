@@ -452,10 +452,10 @@
   }
 
   function drawHeadFeatures(segR, rot, headStyle, pal) {
-    var fwdX = Math.cos(rot);
-    var fwdY = Math.sin(rot);
-    var perpX = -fwdY;
-    var perpY = fwdX;
+    var fwdX = 1;
+    var fwdY = 0;
+    var perpX = 0;
+    var perpY = 1;
 
     if (headStyle === 'horns') {
       ctx.fillStyle = pal.dark;
