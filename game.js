@@ -27,7 +27,7 @@
   var COMPRESSION_THRESHOLD = 0.3;
   var COMPRESSION_MIN = 0.55;
   var HEAD_RADIUS = 10;
-  var SEGMENT_RADIUS = 8;
+  var SEGMENT_RADIUS = 10.5;
   var PICKUP_RADIUS = 14;
   var FOOD_COUNT = 150;
   var MAX_FOOD = 500;
@@ -37,11 +37,8 @@
   var BOT_COUNT = 7;
   var MAX_SEGMENTS = 200;
   var SPAWN_MARGIN = 300;
-  var MIN_SEG_RADIUS = 4;
-  var MAX_SEG_RADIUS = 12;
+  var SEG_RADIUS = 10.5;
   var GRID_SPACING = 100;
-  var HEAD_SCALE = 1.0;
-  var TAIL_SCALE_RATIO = 0.35;
 
   var WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
 
@@ -521,8 +518,7 @@
       if (sx < -40 || sx > viewW + 40 || sy < -40 || sy > viewH + 40) continue;
 
       var t = n > 1 ? i / (n - 1) : 0;
-      var scale = HEAD_SCALE * Math.pow(TAIL_SCALE_RATIO, t);
-      var segR = MAX_SEG_RADIUS * scale;
+      var segR = SEG_RADIUS;
 
       var colorRatio = 1 - t * 0.5;
       var r = Math.floor(pr * colorRatio + dr * (1 - colorRatio));
