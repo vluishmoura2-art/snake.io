@@ -33,7 +33,7 @@
   var MAX_FOOD = 500;
   var BOOST_COST_PER_SEC = 10;
   var MIN_BOOST_SCORE = 5;
-  var DROP_FOOD_RATIO = 0.6;
+  var DROP_FOOD_RATIO = 1.0;
   var BOT_COUNT = 7;
   var MAX_SEGMENTS = 200;
   var SPAWN_MARGIN = 300;
@@ -277,7 +277,6 @@
     followLeader(playerSegments, angle, boosting, dt);
 
     if (headX <= 0 || headX >= MAP_W || headY <= 0 || headY >= MAP_H) { diePlayer(); return; }
-    if (headHitsSegments(playerSegments, 4)) { diePlayer(); return; }
     for (var b = 0; b < bots.length; b++) {
       if (bots[b].alive && headHitsSegments(bots[b].segments, 1)) { diePlayer(); return; }
     }
@@ -339,9 +338,6 @@
     followLeader(bot.segments, bot.angle, bot.boosting, dt);
 
     if (bot.headX <= 0 || bot.headX >= MAP_W || bot.headY <= 0 || bot.headY >= MAP_H) { respawnBot(bot); return; }
-    for (var s = 4; s < bot.segments.length; s++) {
-      if (distSq(bot.headX, bot.headY, bot.segments[s].x, bot.segments[s].y) < HEAD_COL_SQ) { respawnBot(bot); return; }
-    }
     if (playerAlive) {
       for (var si = 1; si < playerSegments.length; si++) {
         if (distSq(bot.headX, bot.headY, playerSegments[si].x, playerSegments[si].y) < HEAD_COL_SQ) { respawnBot(bot); return; }
@@ -365,6 +361,7 @@
   }
 
   function respawnBot(bot) {
+    dropFoodFromSegments(bot.segments);
     var a = Math.random() * Math.PI * 2;
     var x = randFloat(SPAWN_MARGIN, MAP_W - SPAWN_MARGIN);
     var y = randFloat(SPAWN_MARGIN, MAP_H - SPAWN_MARGIN);

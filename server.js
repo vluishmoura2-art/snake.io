@@ -25,7 +25,7 @@ const FOOD_COUNT = 150;
 const MAX_FOOD = 500;
 const BOOST_COST_PER_SEC = 10;
 const MIN_BOOST_SCORE = 5;
-const DROP_FOOD_RATIO = 0.6;
+const DROP_FOOD_RATIO = 1.0;
 const MAX_PLAYERS = 30;
 const SPAWN_MARGIN = 300;
 const MAX_SEGMENTS = 200;
@@ -180,15 +180,6 @@ function updatePlayer(p, dt) {
     p.alive = false;
     dropFoodFromSnake(p);
     return;
-  }
-
-  for (let i = 4; i < p.segments.length; i++) {
-    const seg = p.segments[i];
-    if (distSq(p.headX, p.headY, seg.x, seg.y) < HEAD_COL_SQ) {
-      p.alive = false;
-      dropFoodFromSnake(p);
-      return;
-    }
   }
 
   for (const other of players.values()) {
