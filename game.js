@@ -22,12 +22,12 @@
   var BOOST_SPEED = 220;
   var ROTATION_SPEED = 3.0;
   var STIFFNESS = 15;
-  var BASE_SEGMENT_DISTANCE = 14;
+  var BASE_SEGMENT_DISTANCE = 26.25;
   var BOOST_STRETCH = 1.35;
   var COMPRESSION_THRESHOLD = 0.3;
   var COMPRESSION_MIN = 0.55;
   var HEAD_RADIUS = 10;
-  var SEGMENT_RADIUS = 10.5;
+  var SEGMENT_RADIUS = 13.125;
   var PICKUP_RADIUS = 14;
   var FOOD_COUNT = 150;
   var MAX_FOOD = 500;
@@ -37,7 +37,7 @@
   var BOT_COUNT = 7;
   var MAX_SEGMENTS = 200;
   var SPAWN_MARGIN = 300;
-  var SEG_RADIUS = 10.5;
+  var SEG_RADIUS = 13.125;
   var GRID_SPACING = 100;
 
   var WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
