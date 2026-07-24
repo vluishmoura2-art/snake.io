@@ -54,14 +54,7 @@
     { name: 'Teal',   primary: '#00bfa5', dark: '#009977' }
   ];
 
-  var SKINS = [
-    { id: 'classic',  name: 'Classic',  spikes: null, scales: null, tail: 'round', head: 'default' },
-    { id: 'spiky',    name: 'Spiky',    spikes: { count: 2, len: 0.55, width: 0.25 }, scales: null, tail: 'stinger', head: 'fangs' },
-    { id: 'scaly',    name: 'Scaly',    spikes: null, scales: { freq: 0.5, opacity: 0.18 }, tail: 'round', head: 'default' },
-    { id: 'armored',  name: 'Armored',  spikes: { count: 1, len: 0.3, width: 0.5 }, scales: { freq: 0.7, opacity: 0.12 }, tail: 'stinger', head: 'horns' },
-    { id: 'serpent',  name: 'Serpent',  spikes: null, scales: { freq: 0.35, opacity: 0.22 }, tail: 'forked', head: 'fangs' },
-    { id: 'royal',    name: 'Royal',    spikes: { count: 3, len: 0.4, width: 0.18 }, scales: null, tail: 'stinger', head: 'horns' },
-  ];
+  var DEFAULT_SKIN = { spikes: null, scales: null, tail: 'round', head: 'default' };
 
   var viewW, viewH;
   var score, highScore, running, animFrameId;
@@ -80,7 +73,6 @@
   var bots, foods;
   var keys = {};
   var mouseActive = false;
-  var playerSkinIdx = 0;
 
   highScore = +(localStorage.getItem('snake-io-hs') || 0);
   highScoreEl.textContent = 'Best: ' + highScore;
@@ -106,22 +98,6 @@
   }
   buildColorPicker();
 
-  var skinSwatches = document.getElementById('skin-swatches');
-  function buildSkinPicker() {
-    skinSwatches.innerHTML = '';
-    SKINS.forEach(function(s, i) {
-      var btn = document.createElement('button');
-      btn.className = 'skin-btn' + (i === playerSkinIdx ? ' active' : '');
-      btn.textContent = s.name;
-      btn.addEventListener('click', function() {
-        playerSkinIdx = i;
-        skinSwatches.querySelectorAll('.skin-btn').forEach(function(b) { b.classList.remove('active'); });
-        btn.classList.add('active');
-      });
-      skinSwatches.appendChild(btn);
-    });
-  }
-  buildSkinPicker();
 
   modeBtns.forEach(function(btn) {
     btn.addEventListener('click', function() {
@@ -244,7 +220,6 @@
         headX: bx, headY: by, angle: bA, targetAngle: bA,
         segments: createSegments(bx, by, bA, 4),
         color: b % PALETTE.length,
-        skinIdx: Math.floor(Math.random() * SKINS.length),
         alive: true, score: 0, boosting: false, boostCooldown: 0
       });
     }
@@ -494,7 +469,7 @@
     }
   }
 
-  function drawSnakeByData(segs, colorIdx, isPlayer, cam, isBoosting, hx, hy, hAngle, skinIdx) {
+  function drawSnakeByData(segs, colorIdx, isPlayer, cam, isBoosting, hx, hy, hAngle) {
     if (!Array.isArray(segs) || !segs.length) return;
     if (typeof hx !== 'number' || typeof hy !== 'number') return;
 
@@ -506,7 +481,7 @@
     var dg = parseInt(pal.dark.slice(3, 5), 16);
     var db = parseInt(pal.dark.slice(5, 7), 16);
     var n = segs.length;
-    var skin = SKINS[skinIdx || 0] || SKINS[0];
+    var skin = DEFAULT_SKIN;
     var now = performance.now();
 
     for (var i = n - 1; i >= 0; i--) {
@@ -617,9 +592,9 @@
     drawFoodList(foods, cam);
     for (var i = 0; i < bots.length; i++) {
       var bot = bots[i];
-      if (bot.alive) drawSnakeByData(bot.segments, bot.color, false, cam, bot.boosting, bot.headX, bot.headY, bot.angle, bot.skinIdx || 0);
+      if (bot.alive) drawSnakeByData(bot.segments, bot.color, false, cam, bot.boosting, bot.headX, bot.headY, bot.angle);
     }
-    if (playerAlive) drawSnakeByData(playerSegments, playerColorIdx, true, cam, boosting, headX, headY, angle, playerSkinIdx);
+    if (playerAlive) drawSnakeByData(playerSegments, playerColorIdx, true, cam, boosting, headX, headY, angle);
     updateLeaderboardSingle();
     drawBoostBar();
   }
@@ -635,7 +610,7 @@
       for (var i = 0; i < remoteSnakes.length; i++) {
         var rs = remoteSnakes[i];
         if (!rs || rs.id === myId || !Array.isArray(rs.segments) || !rs.segments.length) continue;
-        drawSnakeByData(rs.segments, rs.color, false, cam, rs.boosting, rs.x, rs.y, rs.angle, rs.skinIdx || 0);
+        drawSnakeByData(rs.segments, rs.color, false, cam, rs.boosting, rs.x, rs.y, rs.angle);
       }
     }
     if (playerAlive && myId) {
@@ -646,7 +621,7 @@
         }
       }
       if (me && Array.isArray(me.segments)) {
-        drawSnakeByData(me.segments, me.color, true, cam, boosting, me.x, me.y, me.angle, playerSkinIdx);
+        drawSnakeByData(me.segments, me.color, true, cam, boosting, me.x, me.y, me.angle);
       }
     }
     drawBoostBar();
@@ -890,7 +865,7 @@
     localStorage.setItem('snake-io-name', name);
     if (!wsConnected || !ws || ws.readyState !== 1) { pendingJoin = true; preconnectMultiplayer(); return; }
     pendingJoin = false;
-    ws.send(JSON.stringify({ type: 'join', color: playerColorIdx, name: name, skinIdx: playerSkinIdx }));
+    ws.send(JSON.stringify({ type: 'join', color: playerColorIdx, name: name }));
   }
 
   function handleServerMessage(msg) {

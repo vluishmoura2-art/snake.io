@@ -124,7 +124,6 @@ function spawnPlayer(id, color) {
     angle, targetAngle: angle,
     segments,
     color: color % PALETTE.length,
-    skinIdx: 0,
     alive: true, score: 0, boosting: false,
     ws: null, deathNotified: false,
   };
@@ -235,7 +234,6 @@ function gameLoop() {
         y: Math.round(p.headY * 10) / 10,
         angle: Math.round(p.angle * 1000) / 1000,
         color: p.color,
-        skinIdx: p.skinIdx || 0,
         score: Math.round(p.score),
         boosting: p.boosting,
         segments: p.segments.map(s => ({
@@ -291,10 +289,8 @@ wss.on('connection', (ws) => {
     if (msg.type === 'join') {
       const color = typeof msg.color === 'number' ? msg.color : 0;
       const name = typeof msg.name === 'string' ? msg.name.slice(0, 16) : 'Player';
-      const skinIdx = typeof msg.skinIdx === 'number' ? msg.skinIdx : 0;
       const p = spawnPlayer(id, color);
       p.name = name;
-      p.skinIdx = skinIdx;
       p.ws = ws;
       players.set(id, p);
       ws.send(JSON.stringify({ type: 'welcome', id, config: { MAP_W, MAP_H } }));
