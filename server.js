@@ -5,7 +5,7 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({ server, maxPayload: 64 * 1024 });
 app.use(express.static(path.join(__dirname)));
 
 const MAP_W = 4000;
@@ -319,7 +319,7 @@ wss.on('connection', (ws) => {
     const p = players.get(id);
     if (!p) return;
 
-    if (msg.type === 'angle' && typeof msg.angle === 'number') {
+    if (msg.type === 'angle' && Number.isFinite(msg.angle)) {
       p.targetAngle = msg.angle;
     }
 
@@ -330,6 +330,7 @@ wss.on('connection', (ws) => {
     if (msg.type === 'respawn' && !p.alive) {
       const np = spawnPlayer(id, p.color);
       np.name = p.name;
+      np.skinId = p.skinId;
       np.ws = ws;
       Object.assign(p, np);
     }

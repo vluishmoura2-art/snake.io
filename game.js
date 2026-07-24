@@ -24,7 +24,7 @@
   var HEAD_RADIUS = 10;
   var INITIAL_SEGMENT_RADIUS = 13.125;
   var SEGMENT_RADIUS = INITIAL_SEGMENT_RADIUS;
-  var addgrown = 0.10;
+  var addgrown = 0.5;
   var MAX_SEGMENT_RADIUS = 200;
   var SEGMENT_OVERLAP_RATIO = 0.70;
   var BASE_SEGMENT_DISTANCE = SEGMENT_RADIUS * 2 * (1 - SEGMENT_OVERLAP_RATIO);
@@ -676,6 +676,19 @@
   }
 
   function updateLeaderboardSingle() {
+  function renderLeaderboard(entries) {
+    leaderboardEl.replaceChildren();
+    var title = document.createElement('b');
+    title.textContent = 'Leaderboard';
+    leaderboardEl.appendChild(title);
+    entries.forEach(function(entry, index) {
+      var row = document.createElement('div');
+      var label = entry.id === myId ? ' (You)' : '';
+      row.textContent = (index + 1) + '. ' + entry.name + label + ' ? ' + entry.len;
+      leaderboardEl.appendChild(row);
+    });
+  }
+
     var entries = [];
     if (playerAlive) entries.push({ name: 'You', len: playerSegments.length });
     for (var i = 0; i < bots.length; i++) {
@@ -683,8 +696,7 @@
     }
     entries.sort(function(a, b) { return b.len - a.len; });
     var top = entries.slice(0, 5);
-    leaderboardEl.innerHTML = '<b>Leaderboard</b><br/>' +
-      top.map(function(e, i) { return (i + 1) + '. ' + e.name + ' \u2014 ' + e.len; }).join('<br/>');
+    renderLeaderboard(top);
   }
 
   function drawFrameSingle() {
@@ -1002,11 +1014,7 @@
       case 'leaderboard':
         if (msg.entries) {
           var top = msg.entries.slice(0, 8);
-          leaderboardEl.innerHTML = '<b>Leaderboard</b><br/>' +
-            top.map(function(e, i) {
-              var label = e.id === myId ? ' (You)' : '';
-              return (i + 1) + '. ' + e.name + label + ' \u2014 ' + e.len;
-            }).join('<br/>');
+          renderLeaderboard(top);
         }
         break;
       case 'died':
