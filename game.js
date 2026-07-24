@@ -495,34 +495,6 @@
         var hy = side * segR * 0.55;
         ctx.beginPath();
         ctx.moveTo(hx, hy);
-  function drawClubPattern(segR, skin) {
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(0, 0, segR, 0, Math.PI * 2);
-    ctx.clip();
-    if (skin.pattern === 'sash') {
-      ctx.fillStyle = skin.colors[0];
-      ctx.fillRect(-segR, -segR, segR * 2, segR * 2);
-      ctx.rotate(-Math.PI / 4);
-      ctx.fillStyle = skin.sash;
-      ctx.fillRect(-segR * 1.6, -segR * 0.22, segR * 3.2, segR * 0.44);
-    } else {
-      var span = segR * 2 / skin.colors.length;
-      for (var i = 0; i < skin.colors.length; i++) {
-        ctx.fillStyle = skin.colors[i];
-        if (skin.pattern === 'vertical') ctx.fillRect(-segR + i * span, -segR, span + 1, segR * 2);
-        else ctx.fillRect(-segR, -segR + i * span, segR * 2, span + 1);
-      }
-    }
-    ctx.restore();
-    if (skin.accent) {
-      ctx.fillStyle = skin.accent;
-      ctx.beginPath();
-      ctx.arc(0, 0, segR * 0.16, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
         ctx.lineTo(hx - segR * 0.7, hy + side * segR * 0.4);
         ctx.lineTo(hx - segR * 0.5, hy);
         ctx.closePath();
@@ -560,7 +532,36 @@
     }
   }
 
+  function drawClubPattern(segR, skin) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(0, 0, segR, 0, Math.PI * 2);
+    ctx.clip();
+    if (skin.pattern === 'sash') {
+      ctx.fillStyle = skin.colors[0];
+      ctx.fillRect(-segR, -segR, segR * 2, segR * 2);
+      ctx.rotate(-Math.PI / 4);
+      ctx.fillStyle = skin.sash;
+      ctx.fillRect(-segR * 1.6, -segR * 0.22, segR * 3.2, segR * 0.44);
+    } else {
+      var span = segR * 2 / skin.colors.length;
+      for (var i = 0; i < skin.colors.length; i++) {
+        ctx.fillStyle = skin.colors[i];
+        if (skin.pattern === 'vertical') ctx.fillRect(-segR + i * span, -segR, span + 1, segR * 2);
+        else ctx.fillRect(-segR, -segR + i * span, segR * 2, span + 1);
+      }
+    }
+    ctx.restore();
+    if (skin.accent) {
+      ctx.fillStyle = skin.accent;
+      ctx.beginPath();
+      ctx.arc(0, 0, segR * 0.16, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
   function drawSnakeByData(segs, colorIdx, isPlayer, cam, isBoosting, hx, hy, hAngle, skinId) {
+
     if (!Array.isArray(segs) || !segs.length) return;
     if (typeof hx !== 'number' || typeof hy !== 'number') return;
 
