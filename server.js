@@ -28,7 +28,9 @@ const DROP_FOOD_RATIO = 1.0;
 const MAX_PLAYERS = 30;
 const SPAWN_MARGIN = 300;
 const MAX_SEGMENTS = 200;
+const ORB_COLORS = ['#ff4d6d', '#ff9f1c', '#ffe66d', '#2ec4b6', '#4cc9f0', '#7b2cbf', '#f72585'];
 
+const SKIN_IDS = new Set(['flamengo', 'palmeiras', 'sao-paulo', 'fluminense', 'corinthians', 'vasco', 'santos', 'gremio', 'internacional']);
 const PALETTE = [
   { name: 'Green',  primary: '#00cc66', dark: '#009944' },
   { name: 'Blue',   primary: '#3399ff', dark: '#2277cc' },
@@ -101,10 +103,12 @@ function addTailSegment(segments, fallbackAngle) {
   });
 }
 
-function spawnFood(x, y) {
+function spawnFood(x, y, isDrop) {
   return {
     x: x !== undefined ? x : Math.random() * MAP_W,
     y: y !== undefined ? y : Math.random() * MAP_H,
+    color: ORB_COLORS[Math.floor(Math.random() * ORB_COLORS.length)],
+    isDrop: !!isDrop,
   };
 }
 
@@ -132,6 +136,7 @@ function spawnPlayer(id, color) {
     angle, targetAngle: angle,
     segments,
     color: color % PALETTE.length,
+    skinId: 'flamengo',
     alive: true, score: 0, boosting: false,
     ws: null, deathNotified: false,
   };
@@ -144,7 +149,7 @@ function dropFoodFromSnake(p) {
   let placed = 0;
   for (let i = 0; i < p.segments.length && placed < count; i += step) {
     if (foods.length < MAX_FOOD) {
-      foods.push(spawnFood(p.segments[i].x, p.segments[i].y));
+      foods.push(spawnFood(p.segments[i].x, p.segments[i].y, true));
       placed++;
     }
   }
@@ -241,6 +246,7 @@ function gameLoop() {
         id: p.id, name: p.name,
         x: Math.round(p.headX * 10) / 10,
         y: Math.round(p.headY * 10) / 10,
+        skinId: p.skinId,
         angle: Math.round(p.angle * 1000) / 1000,
         color: p.color,
         score: Math.round(p.score),
@@ -256,7 +262,7 @@ function gameLoop() {
     type: 'state',
     snakes,
     segmentRadius: Math.round(SEGMENT_RADIUS * 1000) / 1000,
-    foods: foods.map(f => ({ x: Math.round(f.x), y: Math.round(f.y) })),
+    foods: foods.map(f => ({ x: Math.round(f.x), y: Math.round(f.y), color: f.color, isDrop: f.isDrop })),
   });
 
   if (tickCount % 10 === 0) {
@@ -299,8 +305,10 @@ wss.on('connection', (ws) => {
     if (msg.type === 'join') {
       const color = typeof msg.color === 'number' ? msg.color : 0;
       const name = typeof msg.name === 'string' ? msg.name.slice(0, 16) : 'Player';
+      const skinId = typeof msg.skinId === 'string' && SKIN_IDS.has(msg.skinId) ? msg.skinId : 'flamengo';
       const p = spawnPlayer(id, color);
       p.name = name;
+      p.skinId = skinId;
       p.ws = ws;
       players.set(id, p);
       ws.send(JSON.stringify({ type: 'welcome', id, config: { MAP_W, MAP_H } }));

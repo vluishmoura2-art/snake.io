@@ -24,7 +24,7 @@
   var HEAD_RADIUS = 10;
   var INITIAL_SEGMENT_RADIUS = 13.125;
   var SEGMENT_RADIUS = INITIAL_SEGMENT_RADIUS;
-  var addgrown = 0.5;
+  var addgrown = 0.10;
   var MAX_SEGMENT_RADIUS = 200;
   var SEGMENT_OVERLAP_RATIO = 0.70;
   var BASE_SEGMENT_DISTANCE = SEGMENT_RADIUS * 2 * (1 - SEGMENT_OVERLAP_RATIO);
@@ -39,6 +39,7 @@
   var SPAWN_MARGIN = 300;
   var SEG_RADIUS = SEGMENT_RADIUS;
   var GRID_SPACING = 100;
+  var ORB_COLORS = ['#ff4d6d', '#ff9f1c', '#ffe66d', '#2ec4b6', '#4cc9f0', '#7b2cbf', '#f72585'];
 
   var WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
 
@@ -55,6 +56,18 @@
     { name: 'White',  primary: '#eeeeee', dark: '#bbbbbb' },
     { name: 'Coral',  primary: '#ff7777', dark: '#cc4444' },
     { name: 'Teal',   primary: '#00bfa5', dark: '#009977' }
+  ];
+
+  var CLUB_SKINS = [
+    { id: 'flamengo', name: 'Flamengo', pattern: 'horizontal', colors: ['#d71920', '#111111'] },
+    { id: 'palmeiras', name: 'Palmeiras', pattern: 'vertical', colors: ['#006437', '#f5f5f5'], accent: '#d4af37' },
+    { id: 'sao-paulo', name: 'S?o Paulo', pattern: 'horizontal', colors: ['#f5f5f5', '#d71920', '#111111'] },
+    { id: 'fluminense', name: 'Fluminense', pattern: 'horizontal', colors: ['#7a1f35', '#0a6b43', '#f5f5f5'] },
+    { id: 'corinthians', name: 'Corinthians', pattern: 'vertical', colors: ['#111111', '#f5f5f5'] },
+    { id: 'vasco', name: 'Vasco da Gama', pattern: 'sash', colors: ['#111111'], sash: '#f5f5f5' },
+    { id: 'santos', name: 'Santos', pattern: 'horizontal', colors: ['#f5f5f5', '#111111', '#f5f5f5'], accent: '#d4af37' },
+    { id: 'gremio', name: 'Gr?mio', pattern: 'vertical', colors: ['#00a3e0', '#111111', '#f5f5f5'] },
+    { id: 'internacional', name: 'Internacional', pattern: 'horizontal', colors: ['#d71920', '#f5f5f5'] }
   ];
 
   var DEFAULT_SKIN = { spikes: null, scales: null, tail: 'round', head: 'default' };
@@ -77,6 +90,7 @@
   var keys = {};
   var mouseActive = false;
 
+  var playerSkinId = localStorage.getItem('snake-io-skin') || 'flamengo';
   highScore = +(localStorage.getItem('snake-io-hs') || 0);
   highScoreEl.textContent = 'Best: ' + highScore;
   playerColorIdx = +(localStorage.getItem('snake-io-color') || 0);
@@ -101,11 +115,40 @@
   }
   buildColorPicker();
 
+  var skinSwatches = document.getElementById('skin-swatches');
+  function findClubSkin(id) {
+    for (var i = 0; i < CLUB_SKINS.length; i++) {
+      if (CLUB_SKINS[i].id === id) return CLUB_SKINS[i];
+    }
+    return CLUB_SKINS[0];
+  }
+  function buildSkinPicker() {
+    skinSwatches.innerHTML = '';
+    CLUB_SKINS.forEach(function(skin) {
+      var btn = document.createElement('button');
+      btn.className = 'skin-btn' + (skin.id === playerSkinId ? ' active' : '');
+      btn.type = 'button';
+      btn.textContent = skin.name;
+      btn.style.background = skin.pattern === 'sash'
+        ? 'linear-gradient(135deg, ' + skin.colors[0] + ' 42%, ' + skin.sash + ' 43%, ' + skin.sash + ' 57%, ' + skin.colors[0] + ' 58%)'
+        : 'linear-gradient(90deg, ' + skin.colors.join(', ') + ')';
+      btn.addEventListener('click', function() {
+        playerSkinId = skin.id;
+        localStorage.setItem('snake-io-skin', playerSkinId);
+        skinSwatches.querySelectorAll('.skin-btn').forEach(function(item) { item.classList.remove('active'); });
+        btn.classList.add('active');
+      });
+      skinSwatches.appendChild(btn);
+    });
+  }
+  buildSkinPicker();
+
 
   modeBtns.forEach(function(btn) {
     btn.addEventListener('click', function() {
       gameMode = btn.dataset.mode;
       modeBtns.forEach(function(b) { b.classList.remove('active'); });
+
       btn.classList.add('active');
       if (gameMode === 'multi' && !wsConnected) preconnectMultiplayer();
     });
@@ -187,10 +230,12 @@
     });
   }
 
-  function spawnFood(x, y) {
+  function spawnFood(x, y, isDrop) {
     return {
       x: x !== undefined ? x : randFloat(50, MAP_W - 50),
-      y: y !== undefined ? y : randFloat(50, MAP_H - 50)
+      y: y !== undefined ? y : randFloat(50, MAP_H - 50),
+      color: ORB_COLORS[Math.floor(Math.random() * ORB_COLORS.length)],
+      isDrop: !!isDrop
     };
   }
 
@@ -200,7 +245,7 @@
     var step = Math.max(1, Math.floor(segs.length / count));
     var placed = 0;
     for (var i = 0; i < segs.length && placed < count; i += step) {
-      if (foods.length < MAX_FOOD) { foods.push(spawnFood(segs[i].x, segs[i].y)); placed++; }
+      if (foods.length < MAX_FOOD) { foods.push(spawnFood(segs[i].x, segs[i].y, true)); placed++; }
     }
   }
 
@@ -235,6 +280,7 @@
         headX: bx, headY: by, angle: bA, targetAngle: bA,
         segments: createSegments(bx, by, bA, 4),
         color: b % PALETTE.length,
+        skinId: CLUB_SKINS[Math.floor(Math.random() * CLUB_SKINS.length)].id,
         alive: true, score: 0, boosting: false, boostCooldown: 0
       });
     }
@@ -449,6 +495,34 @@
         var hy = side * segR * 0.55;
         ctx.beginPath();
         ctx.moveTo(hx, hy);
+  function drawClubPattern(segR, skin) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(0, 0, segR, 0, Math.PI * 2);
+    ctx.clip();
+    if (skin.pattern === 'sash') {
+      ctx.fillStyle = skin.colors[0];
+      ctx.fillRect(-segR, -segR, segR * 2, segR * 2);
+      ctx.rotate(-Math.PI / 4);
+      ctx.fillStyle = skin.sash;
+      ctx.fillRect(-segR * 1.6, -segR * 0.22, segR * 3.2, segR * 0.44);
+    } else {
+      var span = segR * 2 / skin.colors.length;
+      for (var i = 0; i < skin.colors.length; i++) {
+        ctx.fillStyle = skin.colors[i];
+        if (skin.pattern === 'vertical') ctx.fillRect(-segR + i * span, -segR, span + 1, segR * 2);
+        else ctx.fillRect(-segR, -segR + i * span, segR * 2, span + 1);
+      }
+    }
+    ctx.restore();
+    if (skin.accent) {
+      ctx.fillStyle = skin.accent;
+      ctx.beginPath();
+      ctx.arc(0, 0, segR * 0.16, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
         ctx.lineTo(hx - segR * 0.7, hy + side * segR * 0.4);
         ctx.lineTo(hx - segR * 0.5, hy);
         ctx.closePath();
@@ -486,7 +560,7 @@
     }
   }
 
-  function drawSnakeByData(segs, colorIdx, isPlayer, cam, isBoosting, hx, hy, hAngle) {
+  function drawSnakeByData(segs, colorIdx, isPlayer, cam, isBoosting, hx, hy, hAngle, skinId) {
     if (!Array.isArray(segs) || !segs.length) return;
     if (typeof hx !== 'number' || typeof hy !== 'number') return;
 
@@ -499,6 +573,7 @@
     var db = parseInt(pal.dark.slice(5, 7), 16);
     var n = segs.length;
     var skin = DEFAULT_SKIN;
+    var clubSkin = findClubSkin(skinId);
     var now = performance.now();
 
     for (var i = n - 1; i >= 0; i--) {
@@ -533,6 +608,7 @@
       ctx.beginPath();
       ctx.arc(0, 0, segR, 0, Math.PI * 2);
       ctx.fill();
+      drawClubPattern(segR, clubSkin);
 
       ctx.strokeStyle = 'rgb(' + Math.floor(r * 0.7) + ',' + Math.floor(g * 0.7) + ',' + Math.floor(b * 0.7) + ')';
       ctx.lineWidth = Math.max(1, segR * 0.12);
@@ -570,14 +646,25 @@
       var fy = f.y - cam.y;
       if (fx < -20 || fx > viewW + 20 || fy < -20 || fy > viewH + 20) continue;
       var pulse = 1 + Math.sin(now / 300 + f.x * 0.1) * 0.2;
-      var r = PICKUP_RADIUS * 0.45 * pulse;
-      ctx.shadowColor = '#ff4444';
-      ctx.shadowBlur = 8;
-      ctx.fillStyle = '#ff4444';
+      var isDrop = !!f.isDrop;
+      var color = f.color || '#ff4d6d';
+      var r = PICKUP_RADIUS * (isDrop ? 0.55 : 0.45) * pulse;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = isDrop ? 32 : 12;
+      if (isDrop) {
+        ctx.globalAlpha = 0.35;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(fx, fy, r * 2.1, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      ctx.fillStyle = color;
       ctx.beginPath();
       ctx.arc(fx, fy, r, 0, Math.PI * 2);
       ctx.fill();
       ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
     }
   }
 
@@ -609,9 +696,9 @@
     drawFoodList(foods, cam);
     for (var i = 0; i < bots.length; i++) {
       var bot = bots[i];
-      if (bot.alive) drawSnakeByData(bot.segments, bot.color, false, cam, bot.boosting, bot.headX, bot.headY, bot.angle);
+      if (bot.alive) drawSnakeByData(bot.segments, bot.color, false, cam, bot.boosting, bot.headX, bot.headY, bot.angle, bot.skinId);
     }
-    if (playerAlive) drawSnakeByData(playerSegments, playerColorIdx, true, cam, boosting, headX, headY, angle);
+    if (playerAlive) drawSnakeByData(playerSegments, playerColorIdx, true, cam, boosting, headX, headY, angle, playerSkinId);
     updateLeaderboardSingle();
     drawBoostBar();
   }
@@ -627,7 +714,7 @@
       for (var i = 0; i < remoteSnakes.length; i++) {
         var rs = remoteSnakes[i];
         if (!rs || rs.id === myId || !Array.isArray(rs.segments) || !rs.segments.length) continue;
-        drawSnakeByData(rs.segments, rs.color, false, cam, rs.boosting, rs.x, rs.y, rs.angle);
+        drawSnakeByData(rs.segments, rs.color, false, cam, rs.boosting, rs.x, rs.y, rs.angle, rs.skinId);
       }
     }
     if (playerAlive && myId) {
@@ -638,7 +725,7 @@
         }
       }
       if (me && Array.isArray(me.segments)) {
-        drawSnakeByData(me.segments, me.color, true, cam, boosting, me.x, me.y, me.angle);
+        drawSnakeByData(me.segments, me.color, true, cam, boosting, me.x, me.y, me.angle, me.skinId);
       }
     }
     drawBoostBar();
@@ -882,7 +969,7 @@
     localStorage.setItem('snake-io-name', name);
     if (!wsConnected || !ws || ws.readyState !== 1) { pendingJoin = true; preconnectMultiplayer(); return; }
     pendingJoin = false;
-    ws.send(JSON.stringify({ type: 'join', color: playerColorIdx, name: name }));
+    ws.send(JSON.stringify({ type: 'join', color: playerColorIdx, name: name, skinId: playerSkinId }));
   }
 
   function handleServerMessage(msg) {
