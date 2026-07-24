@@ -14,9 +14,11 @@ const BASE_SPEED = 120;
 const BOOST_SPEED = 220;
 const ROTATION_SPEED = 3.0;
 const HEAD_RADIUS = 10;
-const SEGMENT_RADIUS = 13.125;
+let SEGMENT_RADIUS = 13.125;
+const addgrown = 0.5;
+const MAX_SEGMENT_RADIUS = 200;
 const SEGMENT_OVERLAP_RATIO = 0.70;
-const BASE_SEGMENT_DISTANCE = SEGMENT_RADIUS * 2 * (1 - SEGMENT_OVERLAP_RATIO);
+let BASE_SEGMENT_DISTANCE = SEGMENT_RADIUS * 2 * (1 - SEGMENT_OVERLAP_RATIO);
 const PICKUP_RADIUS = 14;
 const FOOD_COUNT = 150;
 const MAX_FOOD = 500;
@@ -59,6 +61,12 @@ function angleDiff(a, b) {
 }
 
 function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+function growSegmentRadius(items) {
+  SEGMENT_RADIUS = clamp(SEGMENT_RADIUS + addgrown * items, 0, MAX_SEGMENT_RADIUS);
+  BASE_SEGMENT_DISTANCE = SEGMENT_RADIUS * 2 * (1 - SEGMENT_OVERLAP_RATIO);
+  HEAD_COL_SQ = (HEAD_RADIUS + SEGMENT_RADIUS) * (HEAD_RADIUS + SEGMENT_RADIUS);
+}
 
 function followLeader(segments, headAngle) {
   for (let i = 1; i < segments.length; i++) {
@@ -143,7 +151,7 @@ function dropFoodFromSnake(p) {
 }
 
 const PICKUP_SQ = PICKUP_RADIUS * PICKUP_RADIUS;
-const HEAD_COL_SQ = (HEAD_RADIUS + SEGMENT_RADIUS) * (HEAD_RADIUS + SEGMENT_RADIUS);
+let HEAD_COL_SQ = (HEAD_RADIUS + SEGMENT_RADIUS) * (HEAD_RADIUS + SEGMENT_RADIUS);
 
 function updatePlayer(p, dt) {
   if (!p.alive) return;
@@ -198,6 +206,7 @@ function updatePlayer(p, dt) {
     }
   }
   if (ate > 0) {
+    growSegmentRadius(ate);
     for (let a = 0; a < ate && p.segments.length < MAX_SEGMENTS; a++) {
       addTailSegment(p.segments, p.angle);
     }
@@ -246,6 +255,7 @@ function gameLoop() {
   broadcast({
     type: 'state',
     snakes,
+    segmentRadius: Math.round(SEGMENT_RADIUS * 1000) / 1000,
     foods: foods.map(f => ({ x: Math.round(f.x), y: Math.round(f.y) })),
   });
 

@@ -22,7 +22,10 @@
   var BOOST_SPEED = 220;
   var ROTATION_SPEED = 3.0;
   var HEAD_RADIUS = 10;
-  var SEGMENT_RADIUS = 13.125;
+  var INITIAL_SEGMENT_RADIUS = 13.125;
+  var SEGMENT_RADIUS = INITIAL_SEGMENT_RADIUS;
+  var addgrown = 0.5;
+  var MAX_SEGMENT_RADIUS = 200;
   var SEGMENT_OVERLAP_RATIO = 0.70;
   var BASE_SEGMENT_DISTANCE = SEGMENT_RADIUS * 2 * (1 - SEGMENT_OVERLAP_RATIO);
   var PICKUP_RADIUS = 14;
@@ -34,7 +37,7 @@
   var BOT_COUNT = 7;
   var MAX_SEGMENTS = 200;
   var SPAWN_MARGIN = 300;
-  var SEG_RADIUS = 13.125;
+  var SEG_RADIUS = SEGMENT_RADIUS;
   var GRID_SPACING = 100;
 
   var WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
@@ -129,6 +132,17 @@
   function distSq(x1, y1, x2, y2) { var dx = x1 - x2, dy = y1 - y2; return dx * dx + dy * dy; }
   function randFloat(lo, hi) { return lo + Math.random() * (hi - lo); }
 
+  function setSegmentRadius(radius) {
+    SEGMENT_RADIUS = clamp(radius, 0, MAX_SEGMENT_RADIUS);
+    SEG_RADIUS = SEGMENT_RADIUS;
+    BASE_SEGMENT_DISTANCE = SEGMENT_RADIUS * 2 * (1 - SEGMENT_OVERLAP_RATIO);
+    HEAD_COL_SQ = (HEAD_RADIUS + SEGMENT_RADIUS) * (HEAD_RADIUS + SEGMENT_RADIUS);
+  }
+
+  function growSegmentRadius(items) {
+    setSegmentRadius(SEGMENT_RADIUS + addgrown * items);
+  }
+
   function createSegments(x, y, ang, count) {
     var segs = [];
     for (var i = 0; i < count; i++) {
@@ -201,6 +215,7 @@
   }
 
   function initSinglePlayer() {
+    setSegmentRadius(INITIAL_SEGMENT_RADIUS);
     headX = MAP_W / 2;
     headY = MAP_H / 2;
     angle = Math.random() * Math.PI * 2;
@@ -262,6 +277,7 @@
       }
     }
     if (ate > 0) {
+      growSegmentRadius(ate);
       for (var a = 0; a < ate && playerSegments.length < MAX_SEGMENTS; a++) {
         addTailSegment(playerSegments, angle);
       }
@@ -324,6 +340,7 @@
       }
     }
     if (ate > 0) {
+      growSegmentRadius(ate);
       for (var ai = 0; ai < ate && bot.segments.length < MAX_SEGMENTS; ai++) {
         addTailSegment(bot.segments, bot.angle);
       }
@@ -880,6 +897,9 @@
       case 'state':
         remoteSnakes = msg.snakes || [];
         remoteFoods = msg.foods || [];
+        if (typeof msg.segmentRadius === 'number') {
+          setSegmentRadius(msg.segmentRadius);
+        }
         var me = null;
         for (var i = 0; i < remoteSnakes.length; i++) {
           if (remoteSnakes[i].id === myId) { me = remoteSnakes[i]; break; }
